@@ -1,0 +1,10 @@
+# ── 공통(전처리·판정·보고서) ──
+pandas>=2.0
+openpyxl>=3.1
+pypdf>=4.0
+claude-agent-sdk>=0.1
+
+# ── V-CHECKER 백엔드 API (React 프론트엔드용, FastAPI) ──
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9

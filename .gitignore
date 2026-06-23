@@ -1,0 +1,18 @@
+# ── Node / Vite (프론트엔드) ──
+node_modules/
+dist/
+.vite/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ── 진단 입력/출력 데이터(유저 업로드 CSV·생성 보고서) ──
+*.csv
+*.xlsx
+
+# ── OS / 임시 ──
+.DS_Store
+*.log
