@@ -59,10 +59,10 @@ function Chart({ summary, dark }) {
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
       <defs>
         <linearGradient id="gs" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="#2563eb" />
+          <stop offset="0%" stopColor="#f87171" /><stop offset="100%" stopColor="#ef4444" />
         </linearGradient>
         <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#93c5fd" /><stop offset="100%" stopColor="#60a5fa" />
+          <stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="#2563eb" />
         </linearGradient>
       </defs>
       {ticks.map((t) => (
@@ -267,7 +267,7 @@ function VulnCompare({ summary, total }) {
   return (
     <div className="vcmp">
       <div className="vcmp-head">
-        <h3 className="vcmp-title">AI ↔ 자동화 스크립트 취약 항목 비교</h3>
+        <h3 className="vcmp-title">AI 및 자동화 스크립트 취약 항목 비교</h3>
         <span className="vcmp-sub">취약 항목 기준</span>
       </div>
       <div className="vcmp-rows">
@@ -282,7 +282,7 @@ function VulnCompare({ summary, total }) {
           </div>
         ))}
       </div>
-      <div className="vcmp-foot">최대 {max}건 기준</div>
+      <div className="vcmp-foot">{max}건 기준</div>
     </div>
   )
 }
@@ -441,12 +441,12 @@ export default function App() {
                     <p className="card-sub">자동화 스크립트 / AI 등급별 비교</p>
                   </div>
                   <div className="chart-legend">
-                    <span className="row"><span className="sw" style={{ background: '#2563eb' }} /> 스크립트</span>
-                    <span className="row"><span className="sw" style={{ background: '#60a5fa' }} /> AI</span>
+                    <span className="row"><span className="sw" style={{ background: '#ef4444' }} /> 스크립트</span>
+                    <span className="row"><span className="sw" style={{ background: '#2563eb' }} /> AI</span>
                   </div>
                 </div>
                 <div style={{ padding: '18px 22px 12px' }}>
-                  {judged.length === 0 && <div className="hint">※ "AI 교차 진단" 실행 시 AI(연한 파랑) 막대가 채워집니다.</div>}
+                  {judged.length === 0 && <div className="hint">※ "AI 교차 진단" 실행 시 AI(파랑) 막대가 채워집니다.</div>}
                   <Chart summary={summary} dark={dark} />
                   {(judging || progress.total > 0) && (
                     <>
@@ -459,7 +459,7 @@ export default function App() {
 
               <section className="card">
                 <div className="card-head">
-                  <div className="card-ico" style={{ background: '#fde8ef', color: '#e11d48' }}>◐</div>
+                  <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>✓</div>
                   <div style={{ flex: 1 }}>
                     <h2 className="card-title">결과 분포</h2>
                     <p className="card-sub">{donutMode === 'ai' ? 'AI 판단' : '자동화 스크립트 판단'} 등급 비율</p>
@@ -477,13 +477,20 @@ export default function App() {
             {/* 진단 결과 상세: 마스터-디테일 */}
             <section className="card">
               <div className="card-head">
-                <div className="card-ico">🗂</div>
+                <div className="card-ico">📋</div>
                 <div><h2 className="card-title">진단 결과 상세</h2>
                   <p className="card-sub">행을 클릭하면 자동화·AI 판단 근거를 비교합니다.</p></div>
               </div>
               <div className="master">
                 <div>
                   <input className="search" placeholder="코드 또는 항목명 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
+                  <div className="lhead">
+                    <span className="lh-item">항목코드 · 항목명</span>
+                    <span className="lh-cols">
+                      <span className="lh-col">스크립트</span>
+                      <span className="lh-col">AI</span>
+                    </span>
+                  </div>
                   <div className="list">
                     {shown.length === 0 && <div className="detail-empty">검색 결과가 없습니다</div>}
                     {shown.map((it) => (
