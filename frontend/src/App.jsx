@@ -17,11 +17,20 @@ function niceStep(maxVal) {
 
 function Pill({ v, sm }) {
   const cls = v === '양호' ? 'pass' : v === '취약' ? 'vuln' : v === 'N/A' ? 'na' : 'none'
-  return <span className={`pill ${cls}${sm ? ' sm' : ''}`}>{v || '미판정'}</span>
+  return <span className={`pill ${cls}${sm ? ' sm' : ''}`}>{v || '보류'}</span>
 }
 function Match({ v }) {
   const cls = v === '일치' ? 'match' : v === '불일치' ? 'mis' : 'none'
   return <span className={`pill ${cls} sm`}>{v}</span>
+}
+// 단색(채워진) 초승달 아이콘 — 버튼 글자색을 그대로 따라감
+function MoonIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+      style={{ verticalAlign: '-2px', marginRight: 5 }}>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  )
 }
 
 // ── 막대그래프 (스크립트 vs AI) ────────────────────────────────
@@ -207,7 +216,7 @@ function Detail({ item, edit, setEdit, onSave, saved }) {
           {long && <button className="more-link" onClick={() => setShowFull((v) => !v)}>{showFull ? '접기 ▴' : '자세히 확인 ▾'}</button>}
         </div>
         <div className="cmp">
-          <div className="cmp-head"><span className="cmp-title">AI 분석</span><Pill v={item.ai || '미판정'} /></div>
+          <div className="cmp-head"><span className="cmp-title">AI 분석</span><Pill v={item.ai || '보류'} /></div>
           <div className="cmp-label">판단 근거</div>
           <div className="cmp-text">{item.reason || '아직 판정되지 않았습니다.'}</div>
         </div>
@@ -244,6 +253,36 @@ function Kpi({ title, value, sub, accent, tone, box }) {
       <div className="kpi-title">{title}</div>
       <div className={`kpi-val${tone ? ' ' + tone : ''}`}>{value}</div>
       <div className="kpi-sub">{sub}</div>
+    </div>
+  )
+}
+
+// ── 취약 항목 비교(막대): AI vs 자동화 스크립트 ────────────────
+function VulnCompare({ summary, total }) {
+  const max = Math.max(total, 1)
+  const rows = [
+    { label: 'AI 진단', v: summary.ai.vuln, cls: 'ai' },
+    { label: '자동화 스크립트 진단', v: summary.script.vuln, cls: 'script' },
+  ]
+  return (
+    <div className="vcmp">
+      <div className="vcmp-head">
+        <h3 className="vcmp-title">AI ↔ 자동화 스크립트 취약 항목 비교</h3>
+        <span className="vcmp-sub">취약 항목 기준</span>
+      </div>
+      <div className="vcmp-rows">
+        {rows.map((r) => (
+          <div className="vcmp-row" key={r.label}>
+            <div className="vcmp-name">{r.label}</div>
+            <div className={`vcmp-cnt ${r.cls}`}>{r.v}건</div>
+            <div className="vcmp-track">
+              <div className={`vcmp-fill ${r.cls}${r.v ? '' : ' empty'}`} style={{ width: `${(r.v / max) * 100}%` }} />
+            </div>
+            <div className="vcmp-end">{r.v}</div>
+          </div>
+        ))}
+      </div>
+      <div className="vcmp-foot">최대 {max}건 기준</div>
     </div>
   )
 }
@@ -367,7 +406,7 @@ export default function App() {
       <main className="main">
         <div className="topbar">
           <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : '최종 보고서'}</div>
-          <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : '🌙 다크'}</button>
+          <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : <><MoonIcon />다크</>}</button>
         </div>
 
         {error && <div className="err">{error}</div>}
@@ -384,8 +423,7 @@ export default function App() {
             <div className="kpis">
               <div className="kpi-left">
                 <Kpi title="전체 항목" value={total} sub="진단 대상" />
-                <Kpi title="AI 기준 취약" value={summary.ai.vuln} sub="AI 기준" tone="bad" box="vuln" />
-                <Kpi title="자동화 스크립트 기준 취약" value={summary.script.vuln} sub="자동화 스크립트 기준" tone="bad" box="vuln" />
+                <VulnCompare summary={summary} total={total} />
               </div>
               <div className="kpi-right">
                 <Kpi title="확정 완료" value={`${decided}/${total}`} sub="검토 진행률" />
