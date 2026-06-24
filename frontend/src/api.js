@@ -12,11 +12,31 @@ async function jfetch(url, opts) {
 
 export const getHealth = () => jfetch('/api/health')
 
-export function uploadCsv(file) {
+export function uploadCsv(file, runKind = '최초진단') {
   const fd = new FormData()
   fd.append('file', file)
+  fd.append('run_kind', runKind)
   return jfetch('/api/upload', { method: 'POST', body: fd })
 }
+
+// ── 자산관리 / 비교 ──
+export const getAssets = () => jfetch('/api/assets')
+export const getAssetRuns = (assetId) => jfetch(`/api/assets/${encodeURIComponent(assetId)}/runs`)
+export const getRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`)
+export const deleteRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' })
+export const deleteAsset = (assetId) => jfetch(`/api/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' })
+export const getCompare = (base, target) =>
+  jfetch(`/api/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`)
+export const compareCsvUrl = (base, target) =>
+  `/api/compare.csv?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`
+
+// 현재 세션을 자산목록에 추가(영속화)
+export const saveAsset = (session_id) =>
+  jfetch('/api/asset/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id }),
+  })
 
 export const getState = (sid) => jfetch(`/api/state?session_id=${sid}`)
 

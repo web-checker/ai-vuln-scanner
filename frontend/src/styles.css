@@ -288,3 +288,72 @@ table.report .reason { min-width: 420px; white-space: normal; word-break: break-
 :root[data-theme="dark"] .kpi.accent .kpi-val { color: #93c5fd; }
 :root[data-theme="dark"] .card-title, :root[data-theme="dark"] .dh-code,
 :root[data-theme="dark"] .dh-name, :root[data-theme="dark"] .cmp-title { color: #93c5fd; }
+
+/* ── 자산관리 / 비교 (추가) ── */
+.pill.warn { color: var(--warn); background: var(--warn-bg); }
+:root[data-theme="dark"] .pill.warn { background: #2a2113; color: #fbbf24; }
+.kpi-val.good { color: var(--good); }
+
+/* 업로드 종류(최초/이행) 라디오 */
+.runkind { display: flex; gap: 8px; margin: 2px 0 10px; }
+.runkind-opt { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px 6px; border-radius: 10px; cursor: pointer; font-size: 12.5px; font-weight: 700;
+  color: var(--nav-mute); background: var(--nav-soft); border: 1px solid transparent; }
+.runkind-opt.on { color: #fff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.16); }
+.runkind-opt input { accent-color: #fff; }
+
+/* 비교 대상 선택 줄 */
+.cmp-pick { display: flex; align-items: flex-end; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.cmp-pick-field { display: flex; flex-direction: column; gap: 5px; }
+.cmp-pick-field label { font-size: 12px; font-weight: 700; color: var(--mute); }
+.cmp-pick-field select { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font-family: var(--font); font-weight: 600; min-width: 240px; }
+.cmp-vs { font-size: 20px; font-weight: 900; color: var(--mute); padding-bottom: 8px; }
+
+/* ── 자산목록 추가 확인 모달 / 알림 (추가) ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(11,18,32,0.46); z-index: 60;
+  display: grid; place-items: center; animation: fade .12s ease; }
+.modal { width: min(440px, 92vw); background: var(--card); border-radius: 18px; padding: 26px 24px 18px;
+  box-shadow: 0 24px 60px rgba(15,23,42,0.32); border: 1px solid var(--line); text-align: center; }
+.modal-ico { font-size: 34px; margin-bottom: 6px; }
+.modal-title { margin: 0 0 8px; font-size: 19px; font-weight: 900; color: var(--ink); }
+.modal-sub { margin: 0 0 14px; font-size: 13.5px; color: var(--slate); line-height: 1.5; }
+.modal-meta { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px; border-radius: 12px; background: var(--surface); margin-bottom: 16px; font-size: 13.5px; color: var(--slate); }
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions .btn { flex: 1; }
+.modal-note { margin-top: 12px; font-size: 11.5px; color: var(--mute); line-height: 1.5; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+
+.notice { background: var(--good-bg); color: var(--good); border: 1px solid #b7e4cd;
+  padding: 11px 14px; border-radius: 12px; font-weight: 700; font-size: 13.5px; }
+:root[data-theme="dark"] .notice { background: #112a20; color: #6ee7b7; border-color: #1f4634; }
+
+.asset-saved { text-align: center; font-size: 13px; font-weight: 800; color: #6ee7b7;
+  background: var(--nav-soft); border-radius: 10px; padding: 10px; }
+
+/* ── 비교 대상(base/target) 명시 카드 + 삭제 버튼 (추가) ── */
+.cmp-targets { display: flex; align-items: stretch; gap: 14px; padding: 18px 22px 4px; }
+.cmp-target { flex: 1; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+  background: var(--surface); display: flex; flex-direction: column; gap: 5px; }
+.ct-label { font-size: 12px; font-weight: 800; color: var(--mute); letter-spacing: .02em; }
+.ct-meta { font-size: 14px; font-weight: 800; color: var(--ink); }
+.ct-file { font-size: 12.5px; color: var(--slate); word-break: break-all; }
+.ct-vuln { font-size: 12.5px; font-weight: 700; color: var(--bad); }
+.cmp-arrow { display: grid; place-items: center; font-size: 24px; font-weight: 900; color: var(--mute); }
+
+.del-btn { border: 1px solid var(--line); background: var(--card); color: var(--bad);
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; line-height: 1; }
+.del-btn:hover { background: var(--bad-bg); border-color: #f3b6c4; }
+
+/* ── 진단이력 파일명 그룹 헤더 (추가) ── */
+.report .grp-row { cursor: pointer; background: var(--surface); }
+.report .grp-row:hover { background: #eef2f8; }
+:root[data-theme="dark"] .report .grp-row:hover { background: #1b2740; }
+.report .grp-row td { font-weight: 800; color: var(--ink); padding: 11px 14px; }
+.grp-caret { display: inline-block; width: 16px; color: var(--mute); font-weight: 900; }
+.grp-count { margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--mute);
+  background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
+
+/* ── 진단 결과 비교 KPI: 정확히 4등분 (추가) ── */
+.cmp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding: 8px 22px 0; }

@@ -20,6 +20,20 @@ GUIDE_DIR = next(
     ROOT_DIR / "guideline",
 )
 
+# ── 영속 저장소(로컬 CSV) ──────────────────────────────────────
+# 진단대상(자산)·진단실행(Run)을 재시작 후에도 유지하기 위한 CSV 저장소.
+# CSV_*는 인덱스(레지스트리), runs/{asset_id}/{run_id}.csv 는 Run별 항목결과.
+# (DATA_DIR는 store.py 가 최초 접근 시 생성한다)
+DATA_DIR = Path(os.environ.get("VCHECKER_DATA_DIR", str(ROOT_DIR / "data")))
+ASSETS_CSV = DATA_DIR / "assets.csv"
+RUNS_INDEX_CSV = DATA_DIR / "runs_index.csv"
+RUNS_DIR = DATA_DIR / "runs"
+
+# Run 종류(최초진단/이행점검). 업로드 시 사용자가 수동 선택한다.
+RUN_FIRST = "최초진단"
+RUN_FOLLOWUP = "이행점검"
+VALID_RUN_KINDS = (RUN_FIRST, RUN_FOLLOWUP)
+
 # ── 실행 방식 ───────────────────────────────────────────────────
 # claude_agent_sdk + 로컬 claude CLI(구독 인증)만 사용한다. API 키/종량제 과금 없음.
 # claude CLI '전체 경로'를 자동 탐지한다 — 파이썬 서버(uvicorn) 프로세스는 셸 PATH/별칭을
@@ -97,6 +111,26 @@ REPORT_COLUMNS = [
     "판단근거",    # AI 생성 + 사람 검토
     "진단대상", "진단대상IP", "중요도",
 ]
+
+# Run 영속 CSV 컬럼 — 보고서의 '상위집합'.
+# 세션 복원(대시보드 재표시)과 최초↔이행 비교를 모두 지원하기 위해
+# 스크립트결과/AI결과/확정결과를 한 행에 모두 보존한다.
+RUN_COLUMNS = [
+    "항목코드", "분류", "항목", "판단기준", "중요도", "진단대상", "진단대상IP",
+    "스크립트결과", "AI결과", "AI근거",
+    "확정결과", "확정근거", "확정여부",
+]
+
+# 비교(최초↔이행) 결과 컬럼 + 전이 상태값
+COMPARE_COLUMNS = [
+    "항목코드", "분류", "항목", "중요도",
+    "최초결과", "이행결과", "상태",
+]
+C_IMPROVED = "개선"      # 취약 → 양호
+C_UNFIXED = "미조치"     # 취약 → 취약
+C_WORSENED = "악화"      # 양호 → 취약
+C_KEPT = "양호유지"      # 양호 → 양호
+C_NA = "대상외"          # 한쪽이 N/A·결측
 
 # ── 주통기 가이드 PDF 매핑 ──────────────────────────────────────
 # 항목코드 접두어(하이픈 앞) -> 가이드 PDF 파일명.

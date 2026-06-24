@@ -74,6 +74,11 @@ def to_excel_bytes(report_df: pd.DataFrame, sheet_name: str = "진단결과") ->
     return buf.getvalue()
 
 
+def build_compare_csv(compare_df: pd.DataFrame) -> bytes:
+    """비교 결과 DataFrame(COMPARE_COLUMNS)을 CSV 바이트로(UTF-8 BOM + 전체 인용)."""
+    return to_csv_bytes(compare_df)
+
+
 def _format_sheet(ws, df: pd.DataFrame) -> None:
     """열 너비, 헤더 강조, 결과별 색상 등 기본 서식."""
     from openpyxl.styles import Alignment, Font, PatternFill

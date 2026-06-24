@@ -133,7 +133,7 @@ function Donut({ counts, dark }) {
 }
 
 // ── 사이드바 (네이비) ──────────────────────────────────────────
-function Sidebar({ open, tab, setTab, health, session, total, doneCount, onUpload, onJudge, onReset, judging }) {
+function Sidebar({ open, tab, setTab, health, session, total, doneCount, onUpload, onJudge, onReset, judging, runKind, setRunKind, assetSaved, onSaveAsset }) {
   const [drag, setDrag] = useState(false)
   const inputRef = useRef(null)
   const pending = total - doneCount
@@ -151,9 +151,22 @@ function Sidebar({ open, tab, setTab, health, session, total, doneCount, onUploa
           <span className="ni-ico">▦</span> 최종 보고서
           {session && <span className="nav-badge">{total}</span>}
         </button>
+        <button className={`nav-item${tab === 'assets' ? ' active' : ''}`} onClick={() => setTab('assets')}>
+          <span className="ni-ico">🖥</span> 자산관리
+        </button>
+        <button className={`nav-item${tab === 'compare' ? ' active' : ''}`} onClick={() => setTab('compare')}>
+          <span className="ni-ico">⇄</span> 진단 결과 비교
+        </button>
       </nav>
 
       <div className="menu-label">CSV 업로드</div>
+      <div className="runkind">
+        {['최초진단', '이행점검'].map((k) => (
+          <label key={k} className={`runkind-opt${runKind === k ? ' on' : ''}`}>
+            <input type="radio" name="runkind" checked={runKind === k} onChange={() => setRunKind(k)} /> {k}
+          </label>
+        ))}
+      </div>
       <div className={`dropzone${drag ? ' drag' : ''}`}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
@@ -173,6 +186,12 @@ function Sidebar({ open, tab, setTab, health, session, total, doneCount, onUploa
             <div className="fm">완료 {doneCount} / {total}건</div>
           </div>
         </div>
+      )}
+
+      {session && (
+        assetSaved
+          ? <div className="asset-saved">✓ 자산목록에 추가됨</div>
+          : <button className="btn ghost" onClick={onSaveAsset}>🖥 자산목록에 추가</button>
       )}
 
       {session && (
@@ -287,6 +306,307 @@ function VulnCompare({ summary, total }) {
   )
 }
 
+// ── 비교 상태 배지 ─────────────────────────────────────────────
+const CMP_CLS = { 개선: 'pass', 미조치: 'vuln', 악화: 'warn', 양호유지: 'pass', 대상외: 'none' }
+function StatusBadge({ v }) {
+  return <span className={`pill ${CMP_CLS[v] || 'none'} sm`}>{v}</span>
+}
+
+// 공통 포맷 헬퍼
+const fmtDateTime = (at) => (at || '').slice(0, 16).replace('T', ' ')
+const fmtRunOpt = (r) => `${r.kind} · ${fmtDateTime(r.at)} · ${r.filename}`
+
+// ── 자산관리: 목록 → 진단이력(삭제 가능). 비교는 별도 '비교' 탭 ──
+function AssetManager() {
+  const [view, setView] = useState('list')          // 'list' | 'runs'
+  const [assets, setAssets] = useState([])
+  const [asset, setAsset] = useState(null)
+  const [runs, setRuns] = useState([])
+  const [collapsed, setCollapsed] = useState({})    // 원본파일명별 접힘 상태
+  const [err, setErr] = useState('')
+  const [loading, setLoading] = useState(false)
+  const toggleGroup = (fn) => setCollapsed((c) => ({ ...c, [fn]: !c[fn] }))
+
+  const loadAssets = () => {
+    setLoading(true)
+    api.getAssets().then((r) => setAssets(r.assets || []))
+      .catch((e) => setErr(String(e.message || e))).finally(() => setLoading(false))
+  }
+  useEffect(() => { loadAssets() }, [])
+
+  const reloadRuns = async (aid) => {
+    try { const r = await api.getAssetRuns(aid); setRuns(r.runs || []) }
+    catch (e) { setErr(String(e.message || e)) }
+  }
+  async function openAsset(a) { setErr(''); setAsset(a); setView('runs'); await reloadRuns(a.asset_id) }
+
+  async function onDeleteAsset(a, e) {
+    e.stopPropagation()
+    if (!window.confirm(`자산 '${a.name || a.ip}'와(과) 진단 이력 ${a.runCount}건을 모두 삭제할까요?`)) return
+    try { await api.deleteAsset(a.asset_id); loadAssets() } catch (e2) { setErr(String(e2.message || e2)) }
+  }
+  async function onDeleteRun(r) {
+    if (!window.confirm(`진단 기록을 삭제할까요?\n${fmtRunOpt(r)}`)) return
+    try {
+      await api.deleteRun(r.run_id)
+      const left = runs.filter((x) => x.run_id !== r.run_id)
+      if (left.length === 0) { loadAssets(); setView('list') } else setRuns(left)
+    } catch (e) { setErr(String(e.message || e)) }
+  }
+
+  // ── 목록 ──
+  if (view === 'list') {
+    return (
+      <section className="card">
+        <div className="card-head">
+          <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>🖥</div>
+          <div style={{ flex: 1 }}><h2 className="card-title">자산관리</h2>
+            <p className="card-sub">진단대상(IP)별로 저장된 진단 이력입니다. 행을 클릭하면 진단 기록을 보고 삭제할 수 있습니다.</p></div>
+          <button className="sort-btn" onClick={loadAssets}>⟳ 새로고침</button>
+        </div>
+        {err && <div className="err">{err}</div>}
+        <div className="tbl-wrap">
+          <table className="report">
+            <thead><tr>
+              <th>진단대상</th><th>IP</th><th>분류</th><th className="c">진단 횟수</th><th>최근 진단</th><th className="c">삭제</th>
+            </tr></thead>
+            <tbody>
+              {assets.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#7e8aa0' }}>
+                {loading ? '불러오는 중…' : '저장된 자산이 없습니다. CSV를 업로드하면 자동 등록됩니다.'}</td></tr>}
+              {assets.map((a) => (
+                <tr key={a.asset_id} style={{ cursor: 'pointer' }} onClick={() => openAsset(a)}>
+                  <td className="nm">{a.name || '(이름 없음)'}</td>
+                  <td className="code">{a.ip}</td>
+                  <td>{a.group}</td>
+                  <td className="c"><span className="nav-badge" style={{ position: 'static' }}>{a.runCount}</span></td>
+                  <td>{fmtDateTime(a.lastSeen)}</td>
+                  <td className="c"><button className="del-btn" onClick={(e) => onDeleteAsset(a, e)} title="자산 전체 삭제">🗑</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  // 원본파일명별 그룹(첫 등장 순서 유지). 같은 파일의 여러 진단을 접어서 깔끔하게.
+  const groups = []
+  const byFile = new Map()
+  for (const r of runs) {
+    if (!byFile.has(r.filename)) { const g = { filename: r.filename, runs: [] }; byFile.set(r.filename, g); groups.push(g) }
+    byFile.get(r.filename).runs.push(r)
+  }
+
+  // ── 진단이력(Run): 파일명별 그룹 + 기록 삭제 ──
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>🗂</div>
+        <div style={{ flex: 1 }}><h2 className="card-title">{asset?.name} · {asset?.ip}</h2>
+          <p className="card-sub">원본파일별로 묶었습니다. 헤더를 눌러 펼치고, 🗑로 개별 기록을 삭제합니다. 비교는 “진단 결과 비교” 메뉴에서 합니다.</p></div>
+        <button className="sort-btn" onClick={() => setView('list')}>← 자산 목록</button>
+      </div>
+      {err && <div className="err">{err}</div>}
+      <div className="tbl-wrap">
+        <table className="report">
+          <thead><tr><th>종류</th><th>일시</th><th className="c">총항목</th>
+            <th className="c">취약</th><th className="c">양호</th><th className="c">N/A</th><th className="c">삭제</th></tr></thead>
+          <tbody>
+            {groups.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#7e8aa0' }}>진단 기록이 없습니다.</td></tr>}
+            {groups.map((g) => (
+              <React.Fragment key={g.filename}>
+                <tr className="grp-row" onClick={() => toggleGroup(g.filename)}>
+                  <td colSpan={7}>
+                    <span className="grp-caret">{collapsed[g.filename] ? '▸' : '▾'}</span>
+                    📄 {g.filename} <span className="grp-count">{g.runs.length}건</span>
+                  </td>
+                </tr>
+                {!collapsed[g.filename] && g.runs.map((r) => (
+                  <tr key={r.run_id}>
+                    <td><span className={`pill ${r.kind === '최초진단' ? 'na' : 'warn'} sm`}>{r.kind}</span></td>
+                    <td className="code">{fmtDateTime(r.at)}</td>
+                    <td className="c">{r.total}</td><td className="c">{r.vuln}</td>
+                    <td className="c">{r.pass}</td><td className="c">{r.na}</td>
+                    <td className="c"><button className="del-btn" onClick={() => onDeleteRun(r)} title="이 기록 삭제">🗑</button></td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// ── 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 비교 ────
+function CompareTab() {
+  const [assets, setAssets] = useState([])
+  const [assetId, setAssetId] = useState('')
+  const [runs, setRuns] = useState([])
+  const [base, setBase] = useState('')
+  const [target, setTarget] = useState('')
+  const [cmp, setCmp] = useState(null)
+  const [filter, setFilter] = useState('전체')
+  const [err, setErr] = useState('')
+
+  const selectAsset = async (aid) => {
+    setAssetId(aid); setCmp(null); setErr('')
+    if (!aid) { setRuns([]); setBase(''); setTarget(''); return }
+    try {
+      const r = await api.getAssetRuns(aid)
+      const rs = r.runs || []
+      setRuns(rs)
+      setBase(rs[0]?.run_id || '')
+      setTarget(rs.length > 1 ? rs[rs.length - 1].run_id : (rs[0]?.run_id || ''))
+    } catch (e) { setErr(String(e.message || e)) }
+  }
+
+  useEffect(() => {
+    api.getAssets().then((r) => {
+      const list = r.assets || []
+      setAssets(list)
+      if (list[0]) selectAsset(list[0].asset_id)
+    }).catch((e) => setErr(String(e.message || e)))
+  }, [])
+
+  async function runCompare() {
+    if (!base || !target) return
+    if (base === target) { setErr('서로 다른 진단실행을 선택하세요.'); return }
+    setErr('')
+    try { const r = await api.getCompare(base, target); setCmp(r); setFilter('전체') }
+    catch (e) { setErr(String(e.message || e)) }
+  }
+
+  const baseRun = runs.find((r) => r.run_id === base)
+  const targetRun = runs.find((r) => r.run_id === target)
+  const s = cmp?.summary || {}
+  const rows = (cmp?.rows || []).filter((r) => filter === '전체' || r.상태 === filter)
+
+  const TargetCard = ({ label, run }) => (
+    <div className="cmp-target">
+      <div className="ct-label">{label}</div>
+      <span className={`pill ${run?.kind === '최초진단' ? 'na' : 'warn'} sm`}>{run?.kind || '—'}</span>
+      <div className="ct-meta">{fmtDateTime(run?.at)}</div>
+      <div className="ct-file">{run?.filename || '—'}</div>
+      <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
+    </div>
+  )
+
+  return (
+    <>
+      <section className="card">
+        <div className="card-head">
+          <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>⇄</div>
+          <div style={{ flex: 1 }}><h2 className="card-title">진단 결과 비교</h2>
+            <p className="card-sub">자산과 비교할 두 진단실행(기준·대상)을 선택하세요.</p></div>
+        </div>
+        {err && <div className="err">{err}</div>}
+        <div className="cmp-pick" style={{ padding: '4px 22px 18px' }}>
+          <div className="cmp-pick-field">
+            <label>자산</label>
+            <select value={assetId} onChange={(e) => selectAsset(e.target.value)}>
+              {assets.length === 0 && <option value="">(저장된 자산 없음)</option>}
+              {assets.map((a) => <option key={a.asset_id} value={a.asset_id}>{(a.name || a.ip)} · {a.ip} (이력 {a.runCount})</option>)}
+            </select>
+          </div>
+          <div className="cmp-pick-field">
+            <label>기준(base)</label>
+            <select value={base} onChange={(e) => setBase(e.target.value)}>
+              {runs.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
+            </select>
+          </div>
+          <div className="cmp-vs">→</div>
+          <div className="cmp-pick-field">
+            <label>대상(target)</label>
+            <select value={target} onChange={(e) => setTarget(e.target.value)}>
+              {runs.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
+            </select>
+          </div>
+          <button className="btn primary" style={{ width: 'auto', padding: '11px 22px' }}
+            disabled={runs.length < 2} onClick={runCompare}>⇄ 비교</button>
+        </div>
+        {assetId && runs.length < 2 && <div className="hint" style={{ padding: '0 22px 16px' }}>※ 비교하려면 이 자산에 진단실행이 2개 이상 필요합니다.</div>}
+      </section>
+
+      {cmp && (
+        <section className="card">
+          <div className="cmp-targets">
+            <TargetCard label="기준 (base)" run={baseRun} />
+            <div className="cmp-arrow">→</div>
+            <TargetCard label="대상 (target)" run={targetRun} />
+          </div>
+          <div className="cmp-kpis">
+            <Kpi title="개선(조치완료)" value={s.improved ?? 0} sub="취약 → 양호" tone="good" />
+            <Kpi title="미조치" value={s.unfixed ?? 0} sub="취약 → 취약" box="vuln" tone="bad" />
+            <Kpi title="악화(신규취약)" value={s.worsened ?? 0} sub="양호 → 취약" tone="bad" />
+            <Kpi title="조치율" value={s.fixRate == null ? '—' : `${s.fixRate}%`} sub={`기준 취약 ${s.baseVuln ?? 0}건 기준`} accent />
+          </div>
+          <div className="sort-bar" style={{ padding: '8px 22px' }}>
+            {['전체', '개선', '미조치', '악화', '양호유지', '대상외'].map((f) => (
+              <button key={f} className={`sort-btn${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>{f}</button>
+            ))}
+          </div>
+          <div className="tbl-wrap">
+            <table className="report">
+              <thead><tr><th>항목코드</th><th>분류</th><th>항목</th><th className="c">중요도</th>
+                <th className="c">기준결과</th><th className="c">대상결과</th><th className="c">상태</th></tr></thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.항목코드}>
+                    <td className="code">{r.항목코드}</td><td>{r.분류}</td><td className="nm">{r.항목}</td>
+                    <td className="c"><span className={`sev ${r.중요도}`}>{r.중요도}</span></td>
+                    <td className="c"><Pill v={r.최초결과} sm /></td>
+                    <td className="c"><Pill v={r.이행결과} sm /></td>
+                    <td className="c"><StatusBadge v={r.상태} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="report-actions">
+            <a href={api.compareCsvUrl(base, target)}>
+              <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 비교 결과 CSV (.csv)</button>
+            </a>
+          </div>
+        </section>
+      )}
+    </>
+  )
+}
+
+// ── 자산목록 추가 확인 모달 (업로드 직후, 5초 카운트다운) ──────
+function SaveAssetModal({ info, onSave, onClose }) {
+  const [left, setLeft] = useState(5)
+  useEffect(() => {
+    if (left <= 0) { onClose(); return }
+    const t = setTimeout(() => setLeft((n) => n - 1), 1000)
+    return () => clearTimeout(t)
+  }, [left, onClose])
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-ico">🖥</div>
+        <h3 className="modal-title">자산목록에 추가하시겠습니까?</h3>
+        <p className="modal-sub">
+          {info.exists ? '같은 IP의 기존 자산에 새 진단 이력으로 추가됩니다.' : '새 진단대상으로 자산목록에 등록됩니다.'}
+        </p>
+        <div className="modal-meta">
+          <span><b>{info.name || '(이름 없음)'}</b></span>
+          <span>{info.ip || 'IP 없음'}</span>
+          <span className={`pill ${info.kind === '최초진단' ? 'na' : 'warn'} sm`}>{info.kind}</span>
+        </div>
+        <div className="modal-actions">
+          <button className="btn ghost" onClick={onClose}>나중에</button>
+          <button className="btn primary" onClick={onSave}>자산목록에 추가 ({left})</button>
+        </div>
+        <div className="modal-note">선택하지 않으면 {left}초 후 자동으로 닫힙니다(추가 안 함). 이후 왼쪽 “자산목록에 추가” 버튼으로 추가할 수 있습니다.</div>
+      </div>
+    </div>
+  )
+}
+
 // ── 메인 ───────────────────────────────────────────────────────
 export default function App() {
   const [health, setHealth] = useState(null)
@@ -300,9 +620,13 @@ export default function App() {
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [edits, setEdits] = useState({})
   const [savedCode, setSavedCode] = useState(null)
+  const [saveAsk, setSaveAsk] = useState(null)     // 업로드 직후 확인 모달 정보(null=닫힘)
+  const [assetSaved, setAssetSaved] = useState(false)  // 현재 세션이 자산목록에 추가됐는지
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
   const [sideOpen, setSideOpen] = useState(true)
+  const [runKind, setRunKind] = useState('최초진단')  // 업로드 시 진단 종류(수동 선택)
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
   const [sortKey, setSortKey] = useState('code')     // 'code' | 'severity'
   const [sortDir, setSortDir] = useState('asc')      // 'asc' | 'desc'
@@ -323,12 +647,25 @@ export default function App() {
   async function onUpload(file) {
     setError('')
     try {
-      const res = await api.uploadCsv(file)
+      const res = await api.uploadCsv(file, runKind)
       setSession({ id: res.session_id, filename: res.filename })
       setItems(res.items); setSummary(res.summary)
       setSelected(res.items[0]?.code ?? null)
       setEdits({}); setTab('summary'); setSavedCode(null)
+      setAssetSaved(false); setNotice('')
+      // 업로드 직후엔 자동 저장하지 않고, 자산목록 추가 여부를 사람이 선택
+      setSaveAsk({ name: res.asset_name, ip: res.asset_ip, kind: res.run_kind, exists: res.asset_exists })
     } catch (e) { setError(String(e.message || e)) }
+  }
+
+  async function onSaveAsset() {
+    if (!session) return
+    try {
+      await api.saveAsset(session.id)
+      setAssetSaved(true); setSaveAsk(null)
+      setNotice('자산목록에 추가되었습니다.')
+      setTimeout(() => setNotice(''), 3000)
+    } catch (e) { setSaveAsk(null); setError(String(e.message || e)) }
   }
 
   async function onJudge(mode) {
@@ -356,6 +693,7 @@ export default function App() {
     setSession(null); setItems([]); setSelected(null); setEdits({})
     setSummary({ script: { pass: 0, vuln: 0, na: 0 }, ai: { pass: 0, vuln: 0, na: 0 } })
     setProgress({ done: 0, total: 0 }); setTab('summary'); setError('')
+    setSaveAsk(null); setAssetSaved(false); setNotice('')
   }
 
   const getEdit = (it) => edits[it.code] || { result: prefResult(it), reason: it.finalReason || it.reason || '' }
@@ -401,17 +739,24 @@ export default function App() {
 
       <Sidebar open={sideOpen} tab={tab} setTab={setTab} health={health} session={session}
         total={items.length} doneCount={doneCount}
-        onUpload={onUpload} onJudge={onJudge} onReset={onReset} judging={judging} />
+        onUpload={onUpload} onJudge={onJudge} onReset={onReset} judging={judging}
+        runKind={runKind} setRunKind={setRunKind}
+        assetSaved={assetSaved} onSaveAsset={onSaveAsset} />
 
       <main className="main">
         <div className="topbar">
-          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : '최종 보고서'}</div>
+          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? '최종 보고서' : tab === 'assets' ? '자산관리' : '진단 결과 비교'}</div>
           <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : <><MoonIcon />다크</>}</button>
         </div>
 
+        {notice && <div className="notice">{notice}</div>}
         {error && <div className="err">{error}</div>}
 
-        {!session ? (
+        {tab === 'assets' ? (
+          <AssetManager />
+        ) : tab === 'compare' ? (
+          <CompareTab />
+        ) : !session ? (
           <div className="placeholder">
             <div className="ph-ico">📄</div>
             <div className="ph-title">왼쪽에서 CSV 파일을 업로드하세요</div>
@@ -563,6 +908,10 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {saveAsk && (
+        <SaveAssetModal info={saveAsk} onSave={onSaveAsset} onClose={() => setSaveAsk(null)} />
+      )}
     </div>
   )
 }
