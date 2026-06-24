@@ -98,7 +98,7 @@ button { font-family: var(--font); }
 /* ── KPI 카드 ── */
 /* 아래 차트(1.6fr / 1fr)와 끝선을 맞추기 위해 3개·2개 묶음으로 분할 */
 .kpis { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: stretch; }
-.kpi-left { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.kpi-left { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr); gap: 20px; }
 .kpi-right { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px;
   display: flex; flex-direction: column;
@@ -115,6 +115,29 @@ button { font-family: var(--font); }
 /* 중요 강조: 취약 카드 (그라데이션 X, 깔끔한 솔리드) */
 .kpi.vuln-box { background: #ffe4ea; border: 1px solid #f3b5c3;
   box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 14px 30px -24px rgba(225,29,72,0.3); }
+
+/* ── 취약 항목 비교(막대) 카드 ── */
+.vcmp { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 22px 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 14px 30px -26px rgba(15,23,42,0.2); }
+.vcmp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.vcmp-title { font-size: 14px; font-weight: 900; color: var(--ink); margin: 0; letter-spacing: -0.01em; }
+.vcmp-sub { font-size: 11.5px; font-weight: 700; color: var(--mute); white-space: nowrap; }
+.vcmp-rows { display: flex; flex-direction: column; gap: 14px; margin: 2px 0; }
+.vcmp-row { display: grid; grid-template-columns: 128px 56px 1fr 20px; align-items: center; gap: 12px; }
+.vcmp-name { font-size: 13px; font-weight: 800; color: var(--slate); }
+.vcmp-cnt { font-size: 20px; font-weight: 900; text-align: right; letter-spacing: -0.02em; line-height: 1; }
+.vcmp-cnt.ai { color: var(--brand); }
+.vcmp-cnt.script { color: var(--bad); }
+.vcmp-track { position: relative; height: 14px; border-radius: 8px; background: #eef2f8; overflow: hidden; }
+.vcmp-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 8px; transition: width .45s ease; }
+.vcmp-fill:not(.empty) { min-width: 7px; }
+.vcmp-fill.ai { background: linear-gradient(90deg, #3b82f6, #2563eb); }
+.vcmp-fill.script { background: linear-gradient(90deg, #f87171, #ef4444); }
+.vcmp-fill.empty { background: transparent; }
+.vcmp-end { font-size: 13px; font-weight: 800; color: var(--mute); text-align: right; }
+.vcmp-foot { font-size: 11.5px; font-weight: 700; color: var(--mute); text-align: right; }
+:root[data-theme="dark"] .vcmp-track { background: #26334d; }
 
 /* ── 카드 ── */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
@@ -200,12 +223,13 @@ button { font-family: var(--font); }
 .cmp-code.clamp { max-height: 6em; overflow: hidden; }
 .more-link { margin-top: 9px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 13px; font-weight: 800; color: var(--brand); }
 
-.edit { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 2fr; gap: 16px; align-items: start; }
+.edit { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; }
 .edit-label { font-size: 13px; font-weight: 900; color: var(--slate); margin-bottom: 8px; }
-.radio-row { display: flex; flex-direction: column; gap: 8px; }
-.radio { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; color: var(--slate); cursor: pointer; }
+.radio-row { display: flex; flex-direction: column; gap: 11px; }
+.radio { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; color: var(--slate); cursor: pointer; white-space: nowrap; }
+.radio input { width: 16px; height: 16px; }
 .ta { width: 100%; min-height: 200px; padding: 12px 14px; border-radius: 11px; border: 1px solid var(--line);
-  background: var(--card); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.6; resize: vertical; outline: none; }
+  background: var(--card); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6; resize: vertical; outline: none; }
 .ta:focus { border-color: var(--brand); }
 .save-row { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
 .save-btn { width: auto; padding: 11px 22px; }
