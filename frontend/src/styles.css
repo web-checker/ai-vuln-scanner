@@ -48,8 +48,6 @@ button { font-family: var(--font); }
 .ni-ico { font-size: 14px; opacity: 0.9; }
 .nav-badge { margin-left: auto; background: rgba(255,255,255,0.18); color: #fff; font-size: 11px;
   font-weight: 800; padding: 2px 8px; border-radius: 999px; }
-<<<<<<< Updated upstream
-=======
 /* 자산관리 하위 트리(대상 → 진단기록) */
 .tree-caret { margin-left: auto; padding: 0 4px; font-size: 12px; opacity: 0.85; border-radius: 6px; }
 .tree-caret:hover { background: rgba(255,255,255,0.16); }
@@ -77,7 +75,6 @@ button { font-family: var(--font); }
 /* 테이블 안 카운트 배지(자산관리 진단 횟수) — 흰 배경에서도 보이게 */
 .count-badge { display: inline-block; min-width: 24px; padding: 2px 9px; border-radius: 999px;
   background: #e7eefc; color: var(--brand); font-size: 12.5px; font-weight: 800; }
->>>>>>> Stashed changes
 
 /* 사이드바 업로드 */
 .dropzone { border: 1.6px dashed rgba(255,255,255,0.22); background: rgba(255,255,255,0.04);
@@ -353,8 +350,6 @@ table.report .reason { min-width: 420px; white-space: normal; word-break: break-
 :root[data-theme="dark"] .kpi.accent .kpi-val { color: #93c5fd; }
 :root[data-theme="dark"] .card-title, :root[data-theme="dark"] .dh-code,
 :root[data-theme="dark"] .dh-name, :root[data-theme="dark"] .cmp-title { color: #93c5fd; }
-<<<<<<< Updated upstream
-=======
 
 /* ── 자산관리 / 비교 (추가) ── */
 .pill.warn { color: var(--warn); background: var(--warn-bg); }
@@ -441,4 +436,3 @@ table.report .reason { min-width: 420px; white-space: normal; word-break: break-
 
 /* ── 진단 결과 비교 KPI: 정확히 4등분 (추가) ── */
 .cmp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding: 8px 22px 0; }
->>>>>>> Stashed changes

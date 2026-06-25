@@ -20,8 +20,6 @@ GUIDE_DIR = next(
     ROOT_DIR / "guideline",
 )
 
-<<<<<<< Updated upstream
-=======
 # ── 영속 저장소(로컬 CSV) ──────────────────────────────────────
 # 진단대상(자산)·진단실행(Run)을 재시작 후에도 유지하기 위한 CSV 저장소.
 # CSV_*는 인덱스(레지스트리), runs/{asset_id}/{run_id}.csv 는 Run별 항목결과.
@@ -30,11 +28,11 @@ DATA_DIR = Path(os.environ.get("VCHECKER_DATA_DIR", str(ROOT_DIR / "data")))
 ASSETS_CSV = DATA_DIR / "assets.csv"
 RUNS_INDEX_CSV = DATA_DIR / "runs_index.csv"
 RUNS_DIR = DATA_DIR / "runs"
-# 최종 보고서 HTML 영속 저장소(추후 '저장된 보고서 불러오기' 기능에서 run_id로 조회).
+# 최종 보고서 HTML 영속 저장소(저장된 보고서 불러오기 기능에서 run_id로 조회).
 #   reports/{run_id}.html        보고서 본문(자체 완결형 HTML)
 #   reports_index.csv            보고서 메타(인덱스)
 # 다운로드 폴더는 자동 정리로 사라질 수 있어, 보고서는 이 '특정 경로'에 영속 저장한다.
-# VCHECKER_REPORTS_DIR 로 위치를 바꿀 수 있다(예: C:\\취약점진단_보고서).
+# VCHECKER_REPORTS_DIR 로 위치를 바꿀 수 있다(예: C:\취약점진단_보고서).
 REPORTS_DIR = Path(os.environ.get("VCHECKER_REPORTS_DIR", str(DATA_DIR / "reports")))
 REPORTS_INDEX_CSV = DATA_DIR / "reports_index.csv"
 
@@ -43,7 +41,6 @@ RUN_FIRST = "최초진단"
 RUN_FOLLOWUP = "이행점검"
 VALID_RUN_KINDS = (RUN_FIRST, RUN_FOLLOWUP)
 
->>>>>>> Stashed changes
 # ── 실행 방식 ───────────────────────────────────────────────────
 # claude_agent_sdk + 로컬 claude CLI(구독 인증)만 사용한다. API 키/종량제 과금 없음.
 # claude CLI '전체 경로'를 자동 탐지한다 — 파이썬 서버(uvicorn) 프로세스는 셸 PATH/별칭을
@@ -81,6 +78,11 @@ CLAUDE_CLI_PATH = _detect_claude_cli()
 # 'Control request timeout: initialize'가 나므로 넉넉히 둔다.
 CLI_LOAD_TIMEOUT_MS = int(os.environ.get("CLAUDE_LOAD_TIMEOUT_MS", "120000"))
 
+# 한 항목 판정(3단계 전체)의 상한 시간(초). 초과하면 그 항목만 오류로 처리하고 넘어간다.
+# 기본 2분(120s) — CLI 콜드스타트(CLI_LOAD_TIMEOUT_MS=120s)나 웹검색 단계를 감안한 값.
+# 더 느린 환경은 VCHECKER_JUDGE_TIMEOUT(초)로 상향한다.
+JUDGE_TIMEOUT_SEC = float(os.environ.get("VCHECKER_JUDGE_TIMEOUT", "120"))
+
 # ── 모델 ────────────────────────────────────────────────────────
 # 보안 판단 정확도를 위해 Opus 4.8 기본. (비용 절감 시 claude-sonnet-4-6)
 MODEL = os.environ.get("WAS_DIAG_MODEL", "claude-opus-4-8")
@@ -91,12 +93,31 @@ R_VULN = "취약"
 R_NA = "N/A"
 VALID_RESULTS = (R_PASS, R_VULN, R_NA)
 
+
+def final_result(confirmed: str, script: str) -> str:
+    """최종 결과 선택 규칙: 확정값 우선, 없으면 스크립트결과(양쪽 공백 무시).
+
+    보고서/Run/비교가 공유하는 단일 규칙. 빈 문자열 또는 공백뿐이면 다음으로 폴백.
+    """
+    return (confirmed or "").strip() or (script or "").strip()
+
+
+def remediation_for(ai_result: dict, code: str, prefill: dict) -> str:
+    """조치방법 선택 규칙: AI 산출값 우선, 없으면 pre-fill 매핑(CSV/가이드).
+
+    대시보드/보고서/Run 저장이 공유하는 단일 규칙.
+    """
+    return ai_result.get("remediation") or prefill.get(code, "")
+
 # ── CSV(로우데이터) 컬럼 ────────────────────────────────────────
-# was_diag.sh 가 출력하는 실제 헤더
+# was_diag.sh 가 출력하는 실제 헤더(필수 — load_csv 가 존재를 검증)
 CSV_COLUMNS = [
     "항목코드", "분류", "항목", "판단기준", "결과",
     "점검내용", "진단대상", "진단대상IP", "중요도", "점검파일",
 ]
+# (선택) 스크립트가 가이드 조치방법을 하드코딩해 넣는 열. 있으면 AI 판정 전
+#  보고서/엑셀의 '조치방법'을 이 값으로 미리 채운다(없으면 가이드 PDF 자동추출 폴백).
+CSV_REMEDIATION_COLUMN = "조치방법"
 
 # AI(LLM)에게 추론 재료로 넘길 컬럼 (토큰 절감 위해 6개로 축소)
 #  - '결과'(스크립트 자체 판정)는 넘기지 않는다 → AI가 독립 판단하도록.
@@ -105,22 +126,41 @@ AI_INPUT_COLUMNS = [
     "항목코드", "항목", "판단기준", "진단대상", "점검내용", "점검파일",
 ]
 
-# 대시보드 테이블에 띄울 컬럼 (스크립트 결과 vs AI 결과 비교 포함)
+# 대시보드 테이블 컬럼 (스크립트 결과 vs AI 결과 비교 포함)
 DASHBOARD_COLUMNS = [
     "항목코드", "분류", "항목", "중요도",
-    "스크립트결과",  # 스크립트 자체 판정
-    "AI결과",        # AI 판단 결과
-    "일치여부",
+    "스크립트결과", "AI결과", "일치여부",
     "진단대상", "진단대상IP",
 ]
 
 # 최종 보고서(Excel) 컬럼
 REPORT_COLUMNS = [
-    "항목코드", "분류", "항목", "판단기준",
+    "항목코드", "분류", "중요도", "항목", "판단기준",
     "결과",        # 최종 결과(검토 후 확정)
-    "판단근거",    # AI 생성 + 사람 검토
-    "진단대상", "진단대상IP", "중요도",
+    "판단근거",    # AI 생성 + 사람 검토 ("· 양호/취약" 라벨 머리에 붙임)
+    "조치방법",    # 취약 항목만: 가이드 PDF 기반 AI 생성 조치문(양호/N/A는 공란)
+    "진단대상", "진단대상IP",
 ]
+
+# Run 영속 CSV 컬럼 — 보고서의 '상위집합'.
+# 세션 복원(대시보드 재표시)과 최초↔이행 비교를 모두 지원하기 위해
+# 스크립트결과/AI결과/확정결과를 한 행에 모두 보존한다.
+RUN_COLUMNS = [
+    "항목코드", "분류", "항목", "판단기준", "중요도", "진단대상", "진단대상IP",
+    "스크립트결과", "AI결과", "AI근거", "조치방법",
+    "확정결과", "확정근거", "확정여부",
+]
+
+# 비교(최초↔이행) 결과 컬럼 + 전이 상태값
+COMPARE_COLUMNS = [
+    "항목코드", "분류", "항목", "중요도",
+    "최초결과", "이행결과", "상태",
+]
+C_IMPROVED = "개선"      # 취약 → 양호
+C_UNFIXED = "미조치"     # 취약 → 취약
+C_WORSENED = "악화"      # 양호 → 취약
+C_KEPT = "양호유지"      # 양호 → 양호
+C_NA = "N/A"            # 한쪽이 N/A·결측
 
 # ── 주통기 가이드 PDF 매핑 ──────────────────────────────────────
 # 항목코드 접두어(하이픈 앞) -> 가이드 PDF 파일명.

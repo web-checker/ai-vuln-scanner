@@ -18,8 +18,6 @@ export function uploadCsv(file) {
   return jfetch('/api/upload', { method: 'POST', body: fd })
 }
 
-<<<<<<< Updated upstream
-=======
 // ── 자산관리 / 비교 ──
 export const getAssets = () => jfetch('/api/assets')
 export const getAssetRuns = (assetId) => jfetch(`/api/assets/${encodeURIComponent(assetId)}/runs`)
@@ -45,7 +43,6 @@ export const saveAsset = (session_id) =>
     body: JSON.stringify({ session_id }),
   })
 
->>>>>>> Stashed changes
 export const getState = (sid) => jfetch(`/api/state?session_id=${sid}`)
 
 export const saveDecision = (session_id, code, result, reason) =>
@@ -64,9 +61,6 @@ export const resetSession = (session_id) =>
 
 export const reportXlsxUrl = (sid) => `/api/report.xlsx?session_id=${sid}`
 
-<<<<<<< Updated upstream
-export const getReport = (sid) => jfetch(`/api/report?session_id=${sid}`)
-=======
 // 최종 보고서를 HTML로 서버에 저장(추후 불러오기 가능). report_id 반환.
 export const saveReportHtml = (session_id) =>
   jfetch('/api/report/save', {
@@ -95,7 +89,6 @@ export const cancelJudge = (session_id) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id }),
   })
->>>>>>> Stashed changes
 
 // AI 판정 스트림(NDJSON). for await (const ev of judgeStream(sid)) { ... }
 export async function* judgeStream(session_id, mode = 'pending') {

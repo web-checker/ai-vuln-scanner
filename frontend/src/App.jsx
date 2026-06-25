@@ -1,300 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-<<<<<<< Updated upstream
-
-const VALID = ['양호', '취약', 'N/A']
-const prefResult = (it) =>
-  it.finalResult || (VALID.includes(it.script) ? it.script : '') ||
-  (VALID.includes(it.ai) ? it.ai : '') || 'N/A'
-
-// 보기 좋은 눈금 간격(1·2·5·10·…)
-function niceStep(maxVal) {
-  const raw = maxVal / 6
-  const pow = Math.pow(10, Math.floor(Math.log10(raw || 1)))
-  const n = raw / pow
-  const m = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10
-  return Math.max(1, Math.round(m * pow))
-}
-
-function Pill({ v, sm }) {
-  const cls = v === '양호' ? 'pass' : v === '취약' ? 'vuln' : v === 'N/A' ? 'na' : 'none'
-  return <span className={`pill ${cls}${sm ? ' sm' : ''}`}>{v || '보류'}</span>
-}
-function Match({ v }) {
-  const cls = v === '일치' ? 'match' : v === '불일치' ? 'mis' : 'none'
-  return <span className={`pill ${cls} sm`}>{v}</span>
-}
-// 단색(채워진) 초승달 아이콘 — 버튼 글자색을 그대로 따라감
-function MoonIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
-      style={{ verticalAlign: '-2px', marginRight: 5 }}>
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  )
-}
-
-// ── 막대그래프 (스크립트 vs AI) ────────────────────────────────
-function Chart({ summary, dark }) {
-  const cInk = dark ? '#e6ebf5' : '#0b1220'
-  const cSlate = dark ? '#b6c0d4' : '#3f4a5c'
-  const cMute = dark ? '#8a95ab' : '#7e8aa0'
-  const cGrid = dark ? '#26334d' : '#eef2f8'
-  const cBase = dark ? '#33425f' : '#e6ebf2'
-  const data = [
-    { label: '양호', s: summary.script.pass, a: summary.ai.pass },
-    { label: '취약', s: summary.script.vuln, a: summary.ai.vuln },
-    { label: 'N/A', s: summary.script.na, a: summary.ai.na },
-  ]
-  const W = 1180, H = 330, padL = 44, padR = 20, padT = 30, padB = 50
-  const plotH = H - padT - padB, plotW = W - padL - padR
-  const rawMax = Math.max(1, ...data.flatMap((d) => [d.s, d.a]))
-  const step = niceStep(rawMax)
-  const axisMax = Math.ceil(rawMax / step) * step
-  const gw = plotW / data.length, bw = 50, gap = 32
-  const yFor = (v) => padT + plotH - (v / axisMax) * plotH
-  const ticks = []
-  for (let t = 0; t <= axisMax; t += step) ticks.push(t)
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      <defs>
-        <linearGradient id="gs" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f87171" /><stop offset="100%" stopColor="#ef4444" />
-        </linearGradient>
-        <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="#2563eb" />
-        </linearGradient>
-      </defs>
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={padL} x2={W - padR} y1={yFor(t)} y2={yFor(t)}
-            stroke={t === 0 ? cBase : cGrid} strokeWidth={t === 0 ? 1.4 : 1} />
-          <text x={padL - 12} y={yFor(t) + 5} textAnchor="end" fontSize="15" fill={cMute} fontWeight="700">{t}</text>
-        </g>
-      ))}
-      {data.map((d, i) => {
-        const cx = padL + gw * i + gw / 2
-        const x1 = cx - bw - gap / 2, x2 = cx + gap / 2
-        return (
-          <g key={d.label}>
-            <rect x={x1} y={yFor(d.s)} width={bw} height={plotH - (yFor(d.s) - padT)} rx="7" fill="url(#gs)" />
-            <text x={x1 + bw / 2} y={yFor(d.s) - 8} textAnchor="middle" fontSize="19" fontWeight="900" fill={cInk}>{d.s}</text>
-            <rect x={x2} y={yFor(d.a)} width={bw} height={plotH - (yFor(d.a) - padT)} rx="7" fill="url(#ga)" />
-            <text x={x2 + bw / 2} y={yFor(d.a) - 8} textAnchor="middle" fontSize="19" fontWeight="900" fill={cInk}>{d.a}</text>
-            <text x={cx} y={H - 16} textAnchor="middle" fontSize="18" fontWeight="800" fill={cSlate}>{d.label}</text>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
-// ── 도넛(원) 차트 ──────────────────────────────────────────────
-function Donut({ counts, dark }) {
-  const segs = [
-    { v: counts.pass, c: '#10b981', label: '양호' },
-    { v: counts.vuln, c: '#ef4444', label: '취약' },
-    { v: counts.na, c: '#94a3b8', label: 'N/A' },
-  ]
-  const total = segs.reduce((s, x) => s + x.v, 0)
-  const R = 58, sw = 22, cx = 80, cy = 80, CIRC = 2 * Math.PI * R
-  let acc = 0
-  return (
-    <div className="donut-wrap">
-      <svg viewBox="0 0 160 160" className="donut-svg">
-        <circle cx={cx} cy={cy} r={R} fill="none" stroke={dark ? '#26334d' : '#eef2f7'} strokeWidth={sw} />
-        {total > 0 && segs.map((s, i) => {
-          if (!s.v) return null
-          const dash = (s.v / total) * CIRC
-          const el = (
-            <circle key={i} cx={cx} cy={cy} r={R} fill="none" stroke={s.c} strokeWidth={sw}
-              strokeDasharray={`${dash} ${CIRC - dash}`} strokeDashoffset={-acc}
-              transform={`rotate(-90 ${cx} ${cy})`} />
-          )
-          acc += dash
-          return el
-        })}
-        <text x={cx} y={cy - 1} textAnchor="middle" fontSize="28" fontWeight="900"
-          fill={dark ? '#e6ebf5' : '#0b1220'}>{total}</text>
-        <text x={cx} y={cy + 19} textAnchor="middle" fontSize="11" fontWeight="700"
-          fill={dark ? '#8a95ab' : '#7e8aa0'}>총 항목</text>
-      </svg>
-      <div className="donut-legend">
-        {segs.map((s, i) => (
-          <div key={i} className="dl-row">
-            <span className="dl-sw" style={{ background: s.c }} />
-            <span className="dl-name">{s.label}</span>
-            <b>{s.v}</b>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── 사이드바 (네이비) ──────────────────────────────────────────
-function Sidebar({ open, tab, setTab, health, session, total, doneCount, onUpload, onJudge, onReset, judging }) {
-  const [drag, setDrag] = useState(false)
-  const inputRef = useRef(null)
-  const pending = total - doneCount
-  const pick = (f) => f && onUpload(f)
-  return (
-    <aside className={`sidebar${open ? '' : ' collapsed'}`}>
-      <div className="brand"><img className="brand-img" src="/logo.png" alt="CHECKER" /></div>
-
-      <div className="menu-label">MENU</div>
-      <nav className="nav">
-        <button className={`nav-item${tab === 'summary' ? ' active' : ''}`} onClick={() => setTab('summary')}>
-          <span className="ni-ico">▤</span> 요약 및 결과
-        </button>
-        <button className={`nav-item${tab === 'report' ? ' active' : ''}`} onClick={() => setTab('report')}>
-          <span className="ni-ico">▦</span> 최종 보고서
-          {session && <span className="nav-badge">{total}</span>}
-        </button>
-      </nav>
-
-      <div className="menu-label">CSV 업로드</div>
-      <div className={`dropzone${drag ? ' drag' : ''}`}
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
-        onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files?.[0]) }}>
-        <div className="up-ico">⬆</div>
-        <div className="dz-title">파일을 끌어다 놓기 / 클릭</div>
-        <div className="dz-sub">.csv · 최대 200MB</div>
-        <input ref={inputRef} type="file" accept=".csv" hidden onChange={(e) => pick(e.target.files?.[0])} />
-      </div>
-
-      {session && (
-        <div className="filechip">
-          <div className="fi">📄</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="fn">{session.filename}</div>
-            <div className="fm">완료 {doneCount} / {total}건</div>
-          </div>
-        </div>
-      )}
-
-      {session && (
-        <>
-          <button className="btn primary" disabled={!health?.ready || judging || pending === 0}
-            onClick={() => onJudge('pending')}>
-            {judging ? <><span className="spinner" /> 판정 중…</> : <>🛡 AI 교차 진단 ({pending}건)</>}
-          </button>
-          <div className="btn-row">
-            <button className="btn ghost" disabled={!health?.ready || judging} onClick={() => onJudge('all')}>⟳ 재진단</button>
-            <button className="btn ghost" disabled={judging} onClick={onReset}>↺ 초기화</button>
-          </div>
-        </>
-      )}
-    </aside>
-  )
-}
-
-// ── 디테일 ─────────────────────────────────────────────────────
-function Detail({ item, edit, setEdit, onSave, saved }) {
-  const [showFull, setShowFull] = useState(false)
-  useEffect(() => { setShowFull(false) }, [item?.code])
-  if (!item) return <div className="detail-empty">← 왼쪽에서 항목을 선택하세요</div>
-
-  const critLines = String(item.criteria || '판단기준 정보 없음').split('|').map((s) => s.trim()).filter(Boolean)
-  const check = String(item.check || '점검 내용 없음')
-  const long = check.length > 160
-
-  return (
-    <div>
-      <div className="detail-head">
-        <span className="dh-code">{item.code}</span> <span className="dh-name">· {item.name}</span>
-      </div>
-      <div className="cmp-grid">
-        <div className="cmp">
-          <div className="cmp-head"><span className="cmp-title">자동화 스크립트</span><Pill v={item.script} /></div>
-          <div className="cmp-label">판단 근거</div>
-          <div className="cmp-text">{critLines.join('\n\n')}</div>
-          <div className="cmp-label">확인 내용</div>
-          <div className={`cmp-code${long && !showFull ? ' clamp' : ''}`}>{check}</div>
-          {long && <button className="more-link" onClick={() => setShowFull((v) => !v)}>{showFull ? '접기 ▴' : '자세히 확인 ▾'}</button>}
-        </div>
-        <div className="cmp">
-          <div className="cmp-head"><span className="cmp-title">AI 분석</span><Pill v={item.ai || '보류'} /></div>
-          <div className="cmp-label">판단 근거</div>
-          <div className="cmp-text">{item.reason || '아직 판정되지 않았습니다.'}</div>
-        </div>
-      </div>
-      <div className="edit">
-        <div>
-          <div className="edit-label">최종 결과</div>
-          <div className="radio-row">
-            {VALID.map((v) => (
-              <label key={v} className="radio">
-                <input type="radio" name={`res-${item.code}`} checked={edit.result === v}
-                  onChange={() => setEdit({ ...edit, result: v })} /> {v}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div className="edit-label">최종 판단 근거</div>
-          <textarea className="ta" value={edit.reason} onChange={(e) => setEdit({ ...edit, reason: e.target.value })} />
-        </div>
-      </div>
-      <div className="save-row">
-        <button className="btn primary save-btn" onClick={onSave}>이 항목 확정</button>
-        {saved && <span className="saved-tag">✓ 확정됨</span>}
-      </div>
-    </div>
-  )
-}
-
-// ── KPI 카드 ───────────────────────────────────────────────────
-function Kpi({ title, value, sub, accent, tone, box }) {
-  return (
-    <div className={`kpi${accent ? ' accent' : ''}${box === 'vuln' ? ' vuln-box' : ''}`}>
-      <div className="kpi-title">{title}</div>
-      <div className={`kpi-val${tone ? ' ' + tone : ''}`}>{value}</div>
-      <div className="kpi-sub">{sub}</div>
-    </div>
-  )
-}
-
-// ── 취약 항목 비교(막대): AI vs 자동화 스크립트 ────────────────
-function VulnCompare({ summary, total }) {
-  const max = Math.max(total, 1)
-  const rows = [
-    { label: 'AI 진단', v: summary.ai.vuln, cls: 'ai' },
-    { label: '자동화 스크립트 진단', v: summary.script.vuln, cls: 'script' },
-  ]
-  return (
-    <div className="vcmp">
-      <div className="vcmp-head">
-        <h3 className="vcmp-title">AI 및 자동화 스크립트 취약 항목 비교</h3>
-        <span className="vcmp-sub">취약 항목 기준</span>
-      </div>
-      <div className="vcmp-rows">
-        {rows.map((r) => (
-          <div className="vcmp-row" key={r.label}>
-            <div className="vcmp-name">{r.label}</div>
-            <div className={`vcmp-cnt ${r.cls}`}>{r.v}건</div>
-            <div className="vcmp-track">
-              <div className={`vcmp-fill ${r.cls}${r.v ? '' : ' empty'}`} style={{ width: `${(r.v / max) * 100}%` }} />
-            </div>
-            <div className="vcmp-end">{r.v}</div>
-          </div>
-        ))}
-      </div>
-      <div className="vcmp-foot">{max}건 기준</div>
-    </div>
-  )
-}
-=======
 import { Kpi, MoonIcon, Pill, matchLabel, formatCriteria, prefResult, isVuln, labelReason } from './ui.jsx'
 import { Chart, Donut, VulnCompare } from './charts.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
 import AssetManager from './AssetManager.jsx'
 import CompareTab from './CompareTab.jsx'
->>>>>>> Stashed changes
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function App() {
@@ -310,11 +21,8 @@ export default function App() {
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [edits, setEdits] = useState({})
   const [savedCode, setSavedCode] = useState(null)
-<<<<<<< Updated upstream
-=======
   const [assetSaved, setAssetSaved] = useState(false)  // 현재 세션이 자산목록에 추가됐는지
   const [notice, setNotice] = useState('')
->>>>>>> Stashed changes
   const [error, setError] = useState('')
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
   const [sideOpen, setSideOpen] = useState(true)
@@ -348,20 +56,11 @@ export default function App() {
   async function onUpload(file) {
     setError('')
     try {
-<<<<<<< Updated upstream
-      const res = await api.uploadCsv(file)
-=======
       const res = await api.uploadCsv(file)   // 종류는 비교 탭에서 지정(기본 최초진단)
->>>>>>> Stashed changes
       setSession({ id: res.session_id, filename: res.filename })
       setItems(res.items); setSummary(res.summary)
       setSelected(res.items[0]?.code ?? null)
       setEdits({}); setTab('summary'); setSavedCode(null)
-<<<<<<< Updated upstream
-    } catch (e) { setError(String(e.message || e)) }
-  }
-
-=======
       setAssetSaved(false); setNotice('')
       // 업로드 직후 자동 저장하지 않음. 자산 추가는 최종 보고서 탭의 버튼으로 진행
     } catch (e) { setError(String(e.message || e)) }
@@ -377,7 +76,6 @@ export default function App() {
     } catch (e) { setError(String(e.message || e)) }
   }
 
->>>>>>> Stashed changes
   async function onJudge(mode) {
     if (!session) return
     setError(''); setJudging(true); setProgress({ done: 0, total: 0 })
@@ -410,10 +108,7 @@ export default function App() {
     setSession(null); setItems([]); setSelected(null); setEdits({})
     setSummary({ script: { pass: 0, vuln: 0, na: 0 }, ai: { pass: 0, vuln: 0, na: 0 } })
     setProgress({ done: 0, total: 0 }); setTab('summary'); setError('')
-<<<<<<< Updated upstream
-=======
     setAssetSaved(false); setNotice('')
->>>>>>> Stashed changes
   }
 
   const getEdit = (it) => edits[it.code] || { result: prefResult(it), reason: it.finalReason || it.reason || '' }
@@ -459,15 +154,11 @@ export default function App() {
 
       <Sidebar open={sideOpen} tab={tab} setTab={setTab} health={health} session={session}
         total={items.length} doneCount={doneCount}
-<<<<<<< Updated upstream
-        onUpload={onUpload} onJudge={onJudge} onReset={onReset} judging={judging} />
-=======
         onUpload={onUpload} onJudge={onJudge} onReset={onReset} judging={judging}
         onCancelJudge={onCancelJudge} cancelling={cancelling}
         assetSaved={assetSaved} onSaveAsset={onSaveAsset}
         onNavigateAsset={navAsset} assetTarget={assetTarget}
         assetsVersion={assetsVersion} onAssetsChanged={bumpAssets} />
->>>>>>> Stashed changes
 
       <main className="main">
         <div className="topbar">
@@ -477,16 +168,12 @@ export default function App() {
 
         {error && <div className="err">{error}</div>}
 
-<<<<<<< Updated upstream
-        {!session ? (
-=======
         {tab === 'assets' ? (
           <AssetManager dark={dark} target={assetTarget} onNavigateAsset={navAsset}
             assetsVersion={assetsVersion} onAssetsChanged={bumpAssets} />
         ) : tab === 'compare' ? (
           <CompareTab />
         ) : !session ? (
->>>>>>> Stashed changes
           <div className="placeholder">
             <div className="ph-ico">📄</div>
             <div className="ph-title">왼쪽에서 CSV 파일을 업로드하세요</div>
