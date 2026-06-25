@@ -62,26 +62,26 @@ export default function CompareTab() {
         <div className="card-head">
           <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>⇄</div>
           <div style={{ flex: 1 }}><h2 className="card-title">진단 결과 비교</h2>
-            <p className="card-sub">자산과 비교할 두 진단실행(기준·대상)을 선택하세요.</p></div>
+            <p className="card-sub">2개의 비교 파일 선택</p></div>
         </div>
         {err && <div className="err">{err}</div>}
         <div className="cmp-pick" style={{ padding: '4px 22px 18px' }}>
           <div className="cmp-pick-field">
-            <label>자산</label>
+            <label>진단 대상</label>
             <select value={assetId} onChange={(e) => selectAsset(e.target.value)}>
-              {assets.length === 0 && <option value="">(저장된 자산 없음)</option>}
+              {assets.length === 0 && <option value="">(저장된 진단대상 없음)</option>}
               {assets.map((a) => <option key={a.asset_id} value={a.asset_id}>{(a.name || a.ip)} · {a.ip} (이력 {a.runCount})</option>)}
             </select>
           </div>
           <div className="cmp-pick-field">
-            <label>기준(base)</label>
+            <label>기준 파일</label>
             <select value={base} onChange={(e) => setBase(e.target.value)}>
               {runs.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
             </select>
           </div>
           <div className="cmp-vs">→</div>
           <div className="cmp-pick-field">
-            <label>대상(target)</label>
+            <label>비교 파일</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
               {runs.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
             </select>
@@ -89,31 +89,31 @@ export default function CompareTab() {
           <button className="btn primary" style={{ width: 'auto', padding: '11px 22px' }}
             disabled={runs.length < 2} onClick={runCompare}>⇄ 비교</button>
         </div>
-        {assetId && runs.length < 2 && <div className="hint" style={{ padding: '0 22px 16px' }}>※ 비교하려면 이 자산에 진단실행이 2개 이상 필요합니다.</div>}
+        {assetId && runs.length < 2 && <div className="hint" style={{ padding: '0 22px 16px' }}>※ 비교하려면 이 진단 대상에 진단 실행이 2개 이상 필요합니다.</div>}
       </section>
 
       {cmp && (
         <section className="card">
           <div className="cmp-targets">
-            <TargetCard label="기준 (base)" run={baseRun} />
+            <TargetCard label="기준 파일" run={baseRun} />
             <div className="cmp-arrow">→</div>
-            <TargetCard label="대상 (target)" run={targetRun} />
+            <TargetCard label="비교 파일" run={targetRun} />
           </div>
           <div className="cmp-kpis">
-            <Kpi title="개선(조치완료)" value={s.improved ?? 0} sub="취약 → 양호" tone="good" />
+            <Kpi title="조치 완료" value={s.improved ?? 0} sub="취약 → 양호" tone="good" />
             <Kpi title="미조치" value={s.unfixed ?? 0} sub="취약 → 취약" box="vuln" tone="bad" />
-            <Kpi title="악화(신규취약)" value={s.worsened ?? 0} sub="양호 → 취약" tone="bad" />
+            <Kpi title="신규 취약" value={s.worsened ?? 0} sub="양호 → 취약" tone="bad" />
             <Kpi title="조치율" value={s.fixRate == null ? '—' : `${s.fixRate}%`} sub={`기준 취약 ${s.baseVuln ?? 0}건 기준`} accent />
           </div>
           <div className="sort-bar" style={{ padding: '8px 22px' }}>
-            {['전체', '개선', '미조치', '악화', '양호유지', '대상외'].map((f) => (
+            {['전체', '조치 완료', '미조치', '신규 취약', '양호 유지', 'N/A'].map((f) => (
               <button key={f} className={`sort-btn${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>{f}</button>
             ))}
           </div>
           <div className="tbl-wrap">
             <table className="report">
               <thead><tr><th>항목코드</th><th>분류</th><th>항목</th><th className="c">중요도</th>
-                <th className="c">기준결과</th><th className="c">대상결과</th><th className="c">상태</th></tr></thead>
+                <th className="c">기준 결과</th><th className="c">대상 결과</th><th className="c">상태</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.항목코드}>

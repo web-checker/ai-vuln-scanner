@@ -48,6 +48,9 @@ button { font-family: var(--font); }
 .ni-ico { font-size: 14px; opacity: 0.9; }
 .nav-badge { margin-left: auto; background: rgba(255,255,255,0.18); color: #fff; font-size: 11px;
   font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+/* 테이블 안 카운트 배지(자산관리 진단 횟수) — 흰 배경에서도 보이게 */
+.count-badge { display: inline-block; min-width: 24px; padding: 2px 9px; border-radius: 999px;
+  background: #e7eefc; color: var(--brand); font-size: 12.5px; font-weight: 800; }
 
 /* 사이드바 업로드 */
 .dropzone { border: 1.6px dashed rgba(255,255,255,0.22); background: rgba(255,255,255,0.04);
@@ -128,12 +131,12 @@ button { font-family: var(--font); }
 .vcmp-name { font-size: 13px; font-weight: 800; color: var(--slate); }
 .vcmp-cnt { font-size: 20px; font-weight: 900; text-align: right; letter-spacing: -0.02em; line-height: 1; }
 .vcmp-cnt.ai { color: var(--brand); }
-.vcmp-cnt.script { color: var(--bad); }
+.vcmp-cnt.script { color: #f97316; }
 .vcmp-track { position: relative; height: 14px; border-radius: 8px; background: #eef2f8; overflow: hidden; }
 .vcmp-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 8px; transition: width .45s ease; }
 .vcmp-fill:not(.empty) { min-width: 7px; }
 .vcmp-fill.ai { background: linear-gradient(90deg, #3b82f6, #2563eb); }
-.vcmp-fill.script { background: linear-gradient(90deg, #f87171, #ef4444); }
+.vcmp-fill.script { background: linear-gradient(90deg, #fb923c, #f97316); }
 .vcmp-fill.empty { background: transparent; }
 .vcmp-end { font-size: 13px; font-weight: 800; color: var(--mute); text-align: right; }
 .vcmp-foot { font-size: 11.5px; font-weight: 700; color: var(--mute); text-align: right; }
@@ -336,14 +339,16 @@ table.report .reason { min-width: 420px; white-space: normal; word-break: break-
 .cmp-targets { display: flex; align-items: stretch; gap: 14px; padding: 18px 22px 4px; }
 .cmp-target { flex: 1; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
   background: var(--surface); display: flex; flex-direction: column; gap: 5px; }
-.ct-label { font-size: 12px; font-weight: 800; color: var(--mute); letter-spacing: .02em; }
-.ct-meta { font-size: 14px; font-weight: 800; color: var(--ink); }
-.ct-file { font-size: 12.5px; color: var(--slate); word-break: break-all; }
-.ct-vuln { font-size: 12.5px; font-weight: 700; color: var(--bad); }
+.ct-label { font-size: 13px; font-weight: 800; color: var(--mute); letter-spacing: .02em; }
+.ct-meta { font-size: 16px; font-weight: 800; color: var(--ink); }
+.ct-file { font-size: 13.5px; color: var(--slate); word-break: break-all; }
+.ct-vuln { font-size: 14px; font-weight: 700; color: var(--bad); }
+.cmp-target .pill { font-size: 12.5px; padding: 4px 12px; }
 .cmp-arrow { display: grid; place-items: center; font-size: 24px; font-weight: 900; color: var(--mute); }
 
 .del-btn { border: 1px solid var(--line); background: var(--card); color: var(--bad);
-  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; line-height: 1; }
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; line-height: 1;
+  display: inline-grid; place-items: center; }
 .del-btn:hover { background: var(--bad-bg); border-color: #f3b6c4; }
 
 /* ── 진단이력 파일명 그룹 헤더 (추가) ── */

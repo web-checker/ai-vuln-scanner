@@ -1,7 +1,7 @@
 // 자산관리: 목록 → 진단이력(삭제 가능). 비교는 별도 '비교' 탭.
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { fmtDateTime, fmtRunOpt } from './ui.jsx'
+import { fmtDateTime, fmtRunOpt, TrashIcon } from './ui.jsx'
 
 export default function AssetManager() {
   const [view, setView] = useState('list')          // 'list' | 'runs'
@@ -36,7 +36,9 @@ export default function AssetManager() {
     try {
       await api.deleteRun(r.run_id)
       const left = runs.filter((x) => x.run_id !== r.run_id)
-      if (left.length === 0) { loadAssets(); setView('list') } else setRuns(left)
+      loadAssets()   // 목록의 진단 횟수도 즉시 갱신
+      if (left.length === 0) setView('list')
+      else setRuns(left)
     } catch (e) { setErr(String(e.message || e)) }
   }
 
@@ -46,8 +48,8 @@ export default function AssetManager() {
       <section className="card">
         <div className="card-head">
           <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>🖥</div>
-          <div style={{ flex: 1 }}><h2 className="card-title">자산관리</h2>
-            <p className="card-sub">진단대상(IP)별로 저장된 진단 이력입니다. 행을 클릭하면 진단 기록을 보고 삭제할 수 있습니다.</p></div>
+          <div style={{ flex: 1 }}><h2 className="card-title">자산 관리</h2>
+            <p className="card-sub">진단대상(IP)별 진단 이력 / 행 클릭 시 진단 기록 확인 및 삭제 가능</p></div>
           <button className="sort-btn" onClick={loadAssets}>⟳ 새로고침</button>
         </div>
         {err && <div className="err">{err}</div>}
@@ -64,9 +66,9 @@ export default function AssetManager() {
                   <td className="nm">{a.name || '(이름 없음)'}</td>
                   <td className="code">{a.ip}</td>
                   <td>{a.group}</td>
-                  <td className="c"><span className="nav-badge" style={{ position: 'static' }}>{a.runCount}</span></td>
+                  <td className="c"><span className="count-badge">{a.runCount}</span></td>
                   <td>{fmtDateTime(a.lastSeen)}</td>
-                  <td className="c"><button className="del-btn" onClick={(e) => onDeleteAsset(a, e)} title="자산 전체 삭제">🗑</button></td>
+                  <td className="c"><button className="del-btn" onClick={(e) => onDeleteAsset(a, e)} title="자산 전체 삭제"><TrashIcon /></button></td>
                 </tr>
               ))}
             </tbody>
@@ -88,15 +90,15 @@ export default function AssetManager() {
   return (
     <section className="card">
       <div className="card-head">
-        <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>🗂</div>
+        <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>📁</div>
         <div style={{ flex: 1 }}><h2 className="card-title">{asset?.name} · {asset?.ip}</h2>
-          <p className="card-sub">원본파일별로 묶었습니다. 헤더를 눌러 펼치고, 🗑로 개별 기록을 삭제합니다. 비교는 “진단 결과 비교” 메뉴에서 합니다.</p></div>
+          <p className="card-sub">원본 파일 기준으로 분류 / 진단 결과 비교 메뉴에서 확인 가능</p></div>
         <button className="sort-btn" onClick={() => setView('list')}>← 자산 목록</button>
       </div>
       {err && <div className="err">{err}</div>}
       <div className="tbl-wrap">
         <table className="report">
-          <thead><tr><th>종류</th><th>일시</th><th className="c">총항목</th>
+          <thead><tr><th>종류</th><th>일시</th><th className="c">합계</th>
             <th className="c">취약</th><th className="c">양호</th><th className="c">N/A</th><th className="c">삭제</th></tr></thead>
           <tbody>
             {groups.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#7e8aa0' }}>진단 기록이 없습니다.</td></tr>}
@@ -114,7 +116,7 @@ export default function AssetManager() {
                     <td className="code">{fmtDateTime(r.at)}</td>
                     <td className="c">{r.total}</td><td className="c">{r.vuln}</td>
                     <td className="c">{r.pass}</td><td className="c">{r.na}</td>
-                    <td className="c"><button className="del-btn" onClick={() => onDeleteRun(r)} title="이 기록 삭제">🗑</button></td>
+                    <td className="c"><button className="del-btn" onClick={() => onDeleteRun(r)} title="이 기록 삭제"><TrashIcon /></button></td>
                   </tr>
                 ))}
               </React.Fragment>

@@ -30,6 +30,20 @@ export function MoonIcon() {
   )
 }
 
+// 휴지통(삭제) 아이콘 — 버튼 글자색을 그대로 따라감
+export function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ display: 'block' }}>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  )
+}
+
 // KPI 카드
 export function Kpi({ title, value, sub, accent, tone, box }) {
   return (
@@ -42,7 +56,7 @@ export function Kpi({ title, value, sub, accent, tone, box }) {
 }
 
 // 비교 상태 배지
-const CMP_CLS = { 개선: 'pass', 미조치: 'vuln', 악화: 'warn', 양호유지: 'pass', 대상외: 'none' }
+const CMP_CLS = { 개선: 'pass', 미조치: 'vuln', 악화: 'warn', 양호유지: 'pass', 'N/A': 'na' }
 export function StatusBadge({ v }) {
   return <span className={`pill ${CMP_CLS[v] || 'none'} sm`}>{v}</span>
 }
