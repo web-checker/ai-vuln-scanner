@@ -22,14 +22,14 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # ai_app 패키지 import 보장(프로젝트 루트를 경로에 추가)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from ai_app import backend, config, preprocess, report  # noqa: E402
+from ai_app import backend, config, preprocess, report, store  # noqa: E402
 
 app = FastAPI(title="CHECKER 대시보드")
 
@@ -51,6 +51,20 @@ def _get(sid: str) -> dict:
     if state is None:
         raise HTTPException(404, "세션을 찾을 수 없습니다. CSV를 다시 업로드하세요.")
     return state
+
+
+def _flush(state: dict) -> None:
+    """세션 상태를 영속 Run CSV로 저장(덮어쓰기).
+
+    사용자가 '자산목록에 추가'(/api/asset/save)를 누른 세션(persist=True)만 저장한다.
+    아직 추가하지 않은 세션은 일회용(메모리)으로만 동작 → AI판정/확정해도 디스크 미기록.
+    추가 이후엔 AI판정 완료·확정 저장 시점마다 호출돼 이력이 갱신된다.
+    """
+    if not state.get("persist"):
+        return
+    run_df = store.build_run_df(state["df"], state["ai_results"], state["decisions"])
+    store.save_run(state["asset_id"], state["run_id"], state["kind"],
+                   state.get("filename", ""), run_df)
 
 
 def _items_payload(state: dict) -> list[dict]:
@@ -132,7 +146,14 @@ def logo():
 
 
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file: UploadFile = File(...), run_kind: str = Form(config.RUN_FIRST)):
+    """CSV 업로드 → 세션 생성 + 자산 등록 + Run 영속화.
+
+    run_kind: '최초진단' | '이행점검' (사용자가 수동 선택). 같은 진단대상IP면
+    기존 자산에 새 Run으로 누적된다.
+    """
+    if run_kind not in config.VALID_RUN_KINDS:
+        run_kind = config.RUN_FIRST
     data = await file.read()
     try:
         df = preprocess.load_csv(data)
@@ -140,9 +161,25 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, f"CSV 로드 실패: {e}")
     items = preprocess.to_ai_items(df)
     sid = uuid.uuid4().hex
-    SESSIONS[sid] = {"df": df, "items": items, "ai_results": {}, "decisions": {}}
+
+    # 자산 키(진단대상IP) + Run 메타만 미리 준비. 영속화(register/save)는
+    # 사용자가 '자산목록에 추가'를 누를 때까지 하지 않는다(persist=False).
+    name, ip, group = store.asset_fields_from_df(df)
+    asset_id = store.asset_id_for(ip)
+    run_id = store.new_run_id()
+    asset_exists = any(a["asset_id"] == asset_id for a in store.list_assets())
+
+    SESSIONS[sid] = {
+        "df": df, "items": items, "ai_results": {}, "decisions": {},
+        "asset_id": asset_id, "run_id": run_id, "kind": run_kind,
+        "filename": file.filename, "name": name, "ip": ip, "group": group,
+        "persist": False,
+    }
     st = SESSIONS[sid]
     return {"session_id": sid, "filename": file.filename,
+            "asset_id": asset_id, "run_id": run_id, "run_kind": run_kind,
+            "asset_name": name, "asset_ip": ip,
+            "asset_exists": asset_exists, "saved": False,
             "items": _items_payload(st), "summary": _summary(st), "total": len(items)}
 
 
@@ -175,6 +212,7 @@ def judge(req: JudgeReq):
                               "result": res.get("result", ""), "reason": res.get("reason", ""),
                               "source": res.get("source", ""), "confidence": res.get("confidence", ""),
                               "done": done, "total": total}, ensure_ascii=False) + "\n"
+        _flush(state)  # AI 판정 결과를 Run CSV에 반영
         yield json.dumps({"event": "done", "total": total}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
@@ -191,7 +229,27 @@ class DecisionReq(BaseModel):
 def decision(req: DecisionReq):
     state = _get(req.session_id)
     state["decisions"][req.code] = {"result": req.result, "reason": req.reason}
+    _flush(state)  # 확정 결과를 Run CSV에 반영
     return {"ok": True}
+
+
+class SaveAssetReq(BaseModel):
+    session_id: str
+
+
+@app.post("/api/asset/save")
+def save_asset(req: SaveAssetReq):
+    """현재 세션을 자산목록에 추가(영속화). 사용자가 확인창에서 '추가'를 누를 때 호출.
+
+    자산을 진단대상IP로 등록하고 persist=True 로 전환한 뒤 Run CSV를 저장한다.
+    이후의 AI판정/확정도 같은 Run에 누적 저장된다.
+    """
+    state = _get(req.session_id)
+    store.register_asset(state["name"], state["ip"], state["group"])
+    state["persist"] = True
+    _flush(state)
+    return {"ok": True, "saved": True,
+            "asset_id": state["asset_id"], "run_id": state["run_id"]}
 
 
 @app.get("/api/state")
@@ -228,6 +286,89 @@ class ResetReq(BaseModel):
 def reset(req: ResetReq):
     SESSIONS.pop(req.session_id, None)
     return {"ok": True}
+
+
+# ── 자산관리 / 비교 (영속 CSV) ─────────────────────────────────
+def _run_items_payload(run_df) -> list[dict]:
+    """Run CSV(RUN_COLUMNS)를 대시보드 항목 페이로드로 변환(읽기전용 조회용)."""
+    out = []
+    for _, r in run_df.iterrows():
+        script = r.get("스크립트결과", "")
+        ai_res = r.get("AI결과", "")
+        final = r.get("확정결과", "")
+        match = "미판정" if not ai_res else ("일치" if ai_res == script else "불일치")
+        out.append({
+            "code": r.get("항목코드", ""), "group": r.get("분류", ""),
+            "name": r.get("항목", ""), "severity": r.get("중요도", ""),
+            "criteria": r.get("판단기준", ""), "check": "",
+            "target": r.get("진단대상", ""), "ip": r.get("진단대상IP", ""),
+            "script": script, "ai": ai_res, "reason": r.get("AI근거", ""),
+            "source": "", "confidence": "", "match": match,
+            "decided": bool(str(r.get("확정여부", "")).strip()),
+            "finalResult": final, "finalReason": r.get("확정근거", ""),
+        })
+    return out
+
+
+@app.get("/api/assets")
+def get_assets():
+    """등록된 자산 목록(진단대상IP 기준) + 자산별 Run 수."""
+    return {"assets": store.list_assets()}
+
+
+@app.get("/api/assets/{asset_id}/runs")
+def get_asset_runs(asset_id: str):
+    """한 자산의 진단실행(Run) 이력(시간순)."""
+    return {"asset_id": asset_id, "runs": store.list_runs(asset_id)}
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str):
+    """저장된 Run 1건을 대시보드 항목 페이로드로 로드(읽기전용)."""
+    run_df = store.load_run_df(run_id)
+    if run_df is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    return {"run_id": run_id, "items": _run_items_payload(run_df), "total": len(run_df)}
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: str):
+    """진단 기록(Run) 1건 삭제(자산의 마지막 Run이면 자산도 제거)."""
+    if not store.delete_run(run_id):
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+@app.delete("/api/assets/{asset_id}")
+def delete_asset(asset_id: str):
+    """자산 + 모든 Run 기록 삭제."""
+    store.delete_asset(asset_id)
+    return {"ok": True}
+
+
+@app.get("/api/compare")
+def compare(base: str, target: str, asset_id: str = ""):
+    """두 Run(base·target)을 항목코드로 비교. base/target은 사용자가 고른 run_id."""
+    try:
+        return store.compare(base, target)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/compare.csv")
+def compare_csv(base: str, target: str, asset_id: str = ""):
+    """비교 결과 CSV 다운로드(UTF-8 BOM — Excel 한글 호환)."""
+    try:
+        cdf = store.compare_df(base, target)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    data = report.build_compare_csv(cdf)
+    fname = quote(f"compare_{base}_vs_{target}.csv")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"},
+    )
 
 
 # ── (프로덕션) 빌드된 프론트 정적 서빙: frontend/dist 가 있을 때만 ──
