@@ -80,7 +80,7 @@ export default function App() {
     try {
       await api.saveAsset(session.id)
       setAssetSaved(true); setSaveAsk(null)
-      setNotice('자산목록에 추가되었습니다.')
+      setNotice('자산 관리에 추가되었습니다.')
       setTimeout(() => setNotice(''), 3000)
     } catch (e) { setSaveAsk(null); setError(String(e.message || e)) }
   }
@@ -204,12 +204,11 @@ export default function App() {
                     <p className="card-sub">자동화 스크립트 / AI 등급별 비교</p>
                   </div>
                   <div className="chart-legend">
-                    <span className="row"><span className="sw" style={{ background: '#ef4444' }} /> 스크립트</span>
+                    <span className="row"><span className="sw" style={{ background: '#FFBB00' }} /> 스크립트</span>
                     <span className="row"><span className="sw" style={{ background: '#2563eb' }} /> AI</span>
                   </div>
                 </div>
                 <div style={{ padding: '18px 22px 12px' }}>
-                  {judged.length === 0 && <div className="hint">※ "AI 교차 진단" 실행 시 AI(파랑) 막대가 채워집니다.</div>}
                   <Chart summary={summary} dark={dark} />
                   {(judging || progress.total > 0) && (
                     <>
@@ -242,7 +241,7 @@ export default function App() {
               <div className="card-head">
                 <div className="card-ico">📋</div>
                 <div><h2 className="card-title">진단 결과 상세</h2>
-                  <p className="card-sub">행을 클릭하면 자동화·AI 판단 근거를 비교합니다.</p></div>
+                  <p className="card-sub">행 클릭 시 자동화·AI 판단 근거 확인 가능 </p></div>
               </div>
               <div className="master">
                 <div>
@@ -282,7 +281,7 @@ export default function App() {
             <div className="card-head">
               <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
               <div style={{ flex: 1 }}><h2 className="card-title">최종 보고서</h2>
-                <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과를 사용합니다.</p></div>
+                <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과 사용</p></div>
               <div className="sort-bar">
                 <button className={`sort-btn${sortKey === 'code' ? ' on' : ''}`} onClick={() => toggleSort('code')}>항목코드 {sortArrow('code')}</button>
                 <button className={`sort-btn${sortKey === 'severity' ? ' on' : ''}`} onClick={() => toggleSort('severity')}>중요도 {sortArrow('severity')}</button>

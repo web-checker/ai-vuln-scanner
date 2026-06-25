@@ -20,7 +20,7 @@ export default function Sidebar({ open, tab, setTab, health, session, total, don
           {session && <span className="nav-badge">{total}</span>}
         </button>
         <button className={`nav-item${tab === 'assets' ? ' active' : ''}`} onClick={() => setTab('assets')}>
-          <span className="ni-ico">🖥</span> 자산관리
+          <span className="ni-ico">🖥</span> 자산 관리
         </button>
         <button className={`nav-item${tab === 'compare' ? ' active' : ''}`} onClick={() => setTab('compare')}>
           <span className="ni-ico">⇄</span> 진단 결과 비교
@@ -58,8 +58,8 @@ export default function Sidebar({ open, tab, setTab, health, session, total, don
 
       {session && (
         assetSaved
-          ? <div className="asset-saved">✓ 자산목록에 추가됨</div>
-          : <button className="btn ghost" onClick={onSaveAsset}>🖥 자산목록에 추가</button>
+          ? <div className="asset-saved">✓ 자산 관리에 추가됨</div>
+          : <button className="btn ghost" onClick={onSaveAsset}>🖥 자산 관리 추가</button>
       )}
 
       {session && (

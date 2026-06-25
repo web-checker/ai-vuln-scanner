@@ -49,7 +49,7 @@ export default function Detail({ item, edit, setEdit, onSave, saved }) {
         </div>
       </div>
       <div className="save-row">
-        <button className="btn primary save-btn" onClick={onSave}>이 항목 확정</button>
+        <button className="btn primary save-btn" onClick={onSave}>항목 확정</button>
         {saved && <span className="saved-tag">✓ 확정됨</span>}
       </div>
     </div>

@@ -12,6 +12,8 @@ function niceStep(maxVal) {
 
 // ── 막대그래프 (스크립트 vs AI) ────────────────────────────────
 export function Chart({ summary, dark }) {
+  const cScript = '#FFBB00'
+  const cAi = '#2563eb'
   const cInk = dark ? '#e6ebf5' : '#0b1220'
   const cSlate = dark ? '#b6c0d4' : '#3f4a5c'
   const cMute = dark ? '#8a95ab' : '#7e8aa0'
@@ -34,14 +36,6 @@ export function Chart({ summary, dark }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      <defs>
-        <linearGradient id="gs" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f87171" /><stop offset="100%" stopColor="#ef4444" />
-        </linearGradient>
-        <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="#2563eb" />
-        </linearGradient>
-      </defs>
       {ticks.map((t) => (
         <g key={t}>
           <line x1={padL} x2={W - padR} y1={yFor(t)} y2={yFor(t)}
@@ -54,9 +48,9 @@ export function Chart({ summary, dark }) {
         const x1 = cx - bw - gap / 2, x2 = cx + gap / 2
         return (
           <g key={d.label}>
-            <rect x={x1} y={yFor(d.s)} width={bw} height={plotH - (yFor(d.s) - padT)} rx="7" fill="url(#gs)" />
+            <rect x={x1} y={yFor(d.s)} width={bw} height={plotH - (yFor(d.s) - padT)} rx="7" fill={cScript} />
             <text x={x1 + bw / 2} y={yFor(d.s) - 8} textAnchor="middle" fontSize="19" fontWeight="900" fill={cInk}>{d.s}</text>
-            <rect x={x2} y={yFor(d.a)} width={bw} height={plotH - (yFor(d.a) - padT)} rx="7" fill="url(#ga)" />
+            <rect x={x2} y={yFor(d.a)} width={bw} height={plotH - (yFor(d.a) - padT)} rx="7" fill={cAi} />
             <text x={x2 + bw / 2} y={yFor(d.a) - 8} textAnchor="middle" fontSize="19" fontWeight="900" fill={cInk}>{d.a}</text>
             <text x={cx} y={H - 16} textAnchor="middle" fontSize="18" fontWeight="800" fill={cSlate}>{d.label}</text>
           </g>
@@ -69,8 +63,8 @@ export function Chart({ summary, dark }) {
 // ── 도넛(원) 차트 ──────────────────────────────────────────────
 export function Donut({ counts, dark }) {
   const segs = [
-    { v: counts.pass, c: '#10b981', label: '양호' },
-    { v: counts.vuln, c: '#ef4444', label: '취약' },
+    { v: counts.pass, c: '#34d399', label: '양호' },
+    { v: counts.vuln, c: '#f87171', label: '취약' },
     { v: counts.na, c: '#94a3b8', label: 'N/A' },
   ]
   const total = segs.reduce((s, x) => s + x.v, 0)
@@ -113,8 +107,8 @@ export function Donut({ counts, dark }) {
 export function VulnCompare({ summary, total }) {
   const max = Math.max(total, 1)
   const rows = [
-    { label: 'AI 진단', v: summary.ai.vuln, cls: 'ai' },
-    { label: '자동화 스크립트 진단', v: summary.script.vuln, cls: 'script' },
+    { label: 'AI 진단', v: summary.ai.vuln, color: '#2563eb' },
+    { label: '자동화 스크립트 진단', v: summary.script.vuln, color: '#FFBB00' },
   ]
   return (
     <div className="vcmp">
@@ -126,9 +120,10 @@ export function VulnCompare({ summary, total }) {
         {rows.map((r) => (
           <div className="vcmp-row" key={r.label}>
             <div className="vcmp-name">{r.label}</div>
-            <div className={`vcmp-cnt ${r.cls}`}>{r.v}건</div>
+            <div className="vcmp-cnt" style={{ color: r.color }}>{r.v}건</div>
             <div className="vcmp-track">
-              <div className={`vcmp-fill ${r.cls}${r.v ? '' : ' empty'}`} style={{ width: `${(r.v / max) * 100}%` }} />
+              <div className="vcmp-fill" style={{ width: `${(r.v / max) * 100}%`,
+                background: r.v ? r.color : 'transparent', minWidth: r.v ? 7 : 0 }} />
             </div>
             <div className="vcmp-end">{r.v}</div>
           </div>
