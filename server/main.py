@@ -78,7 +78,10 @@ def _prefill_remed(df) -> dict[str, str]:
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
         csv_remed = (row.get(col, "") or "").strip() if has_col else ""
-        out[code] = csv_remed or _guide_remed(code)
+        # 조치방법은 CSV 하드코딩 값만 사용한다.
+        # [비활성화] 가이드 PDF '조치 방법' 절 자동추출 폴백(_guide_remed)은 보존만.
+        #   재활성화하려면 아랫줄을 'csv_remed or _guide_remed(code)' 로 교체.
+        out[code] = csv_remed
     return out
 
 

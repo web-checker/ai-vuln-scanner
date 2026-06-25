@@ -212,10 +212,12 @@ async def _finalize(item: dict, base: str, d: dict, source: str,
         # 결과 파싱 실패/불확실 → 보수적으로 '취약'(N/A로 묻지 않는다). N/A는 대상외 항목만(사전 자동채택).
         result = config.R_VULN
     # '취약' 항목에만 가이드 기반 조치방법 생성(양호/N/A는 공란)
+    # [비활성화] 조치방법 AI 생성 — 현재는 CSV 하드코딩 값을 사용한다(server._prefill_remed).
+    #   재활성화하려면 아래 3줄 주석을 해제. (_remediate / _PRM 코드는 보존)
     remediation = ""
-    if result == config.R_VULN:
-        remediation, rc = await _remediate(base, gtext, item.get("항목코드", ""))
-        cost += rc
+    # if result == config.R_VULN:
+    #     remediation, rc = await _remediate(base, gtext, item.get("항목코드", ""))
+    #     cost += rc
     return {
         "result": result,
         "reason": d.get("reason", "(판단 근거 없음)"),
