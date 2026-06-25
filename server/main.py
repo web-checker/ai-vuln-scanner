@@ -137,7 +137,7 @@ def _items_payload(state: dict) -> list[dict]:
             check=preprocess.restore_multiline(row.get("점검내용", "")),
             target=row.get("진단대상", ""), ip=row.get("진단대상IP", ""),
             script=row.get("결과", ""), ai=a.get("result", ""),
-            reason=a.get("reason", ""), remediation=a.get("remediation") or gr.get(code, ""),
+            reason=a.get("reason", ""), remediation=config.remediation_for(a, code, gr),
             source=a.get("source", ""),
             confidence=a.get("confidence", ""), decided=bool(d),
             final_result=d.get("result", ""), final_reason=d.get("reason", ""),
@@ -170,12 +170,13 @@ def _final_decisions(state: dict) -> dict:
     ai = state["ai_results"]
     dec = state["decisions"]
     gr = state.get("guide_remed", {})
-    script_by = {row.get("항목코드", ""): row.get("결과", "") for _, row in df.iterrows()}
     fd = {}
-    for code, script in script_by.items():
+    for _, row in df.iterrows():
+        code = row.get("항목코드", "")
+        script = row.get("결과", "")
         a = ai.get(code, {})
         entry = dict(dec[code]) if code in dec else {"result": script, "reason": a.get("reason", "")}
-        entry["remediation"] = a.get("remediation") or gr.get(code, "")
+        entry["remediation"] = config.remediation_for(a, code, gr)
         entry["vuln_any"] = config.R_VULN in (script, a.get("result", ""))
         fd[code] = entry
     return fd

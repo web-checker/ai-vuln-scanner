@@ -94,6 +94,14 @@ def final_result(confirmed: str, script: str) -> str:
     """
     return (confirmed or "").strip() or (script or "").strip()
 
+
+def remediation_for(ai_result: dict, code: str, prefill: dict) -> str:
+    """조치방법 선택 규칙: AI 산출값 우선, 없으면 pre-fill 매핑(CSV/가이드).
+
+    대시보드/보고서/Run 저장이 공유하는 단일 규칙.
+    """
+    return ai_result.get("remediation") or prefill.get(code, "")
+
 # ── CSV(로우데이터) 컬럼 ────────────────────────────────────────
 # was_diag.sh 가 출력하는 실제 헤더(필수 — load_csv 가 존재를 검증)
 CSV_COLUMNS = [

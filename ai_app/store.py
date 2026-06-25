@@ -165,8 +165,7 @@ def build_run_df(df: pd.DataFrame, ai_results: dict[str, dict], decisions: dict[
             "스크립트결과": row.get("결과", ""),
             "AI결과": ai.get("result", ""),
             "AI근거": ai.get("reason", "") or restore_multiline(row.get("점검내용", "")),
-            # 조치방법: AI 산출값 우선, 없으면 가이드 매핑(pre-fill)
-            "조치방법": ai.get("remediation") or gr.get(code, ""),
+            "조치방법": config.remediation_for(ai, code, gr),
             "확정결과": dec.get("result", ""),
             "확정근거": dec.get("reason", ""),
             "확정여부": "Y" if dec else "",
