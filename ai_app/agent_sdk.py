@@ -76,7 +76,7 @@ def _item_text(item: dict) -> str:
 
 def judge_item(item: dict) -> dict:
     """3단계 판정(동기). 반환: {result, reason, source, guide, usage, ...}"""
-    return aio.run(_judge_async, item)
+    return aio.run(_judge_async, item, timeout=config.JUDGE_TIMEOUT_SEC)
 
 
 async def _judge_async(item: dict) -> dict:

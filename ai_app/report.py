@@ -48,7 +48,7 @@ def build_report_df(df: pd.DataFrame, decisions: dict[str, dict]) -> pd.DataFram
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
         dec = decisions.get(code, {})
-        result = dec.get("result") or row.get("결과", "")
+        result = config.final_result(dec.get("result", ""), row.get("결과", ""))
         reason = dec.get("reason") or restore_multiline(row.get("점검내용", ""))
         rows.append({
             "항목코드": code,
@@ -93,9 +93,6 @@ def build_compare_csv(compare_df: pd.DataFrame) -> bytes:
     return to_csv_bytes(compare_df)
 
 
-def _format_sheet(ws, df: pd.DataFrame) -> None:
-    """열 너비, 헤더 강조, 결과별 색상 등 기본 서식."""
-    from openpyxl.styles import Alignment, Font, PatternFill
 # ── 데이터 가공 헬퍼 ────────────────────────────────────────────
 def _grouped(rdf: pd.DataFrame):
     """[(분류, [row, ...]), ...] — 등장 순서 유지."""

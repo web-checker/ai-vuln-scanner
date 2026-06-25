@@ -71,6 +71,11 @@ CLAUDE_CLI_PATH = _detect_claude_cli()
 # 'Control request timeout: initialize'가 나므로 넉넉히 둔다.
 CLI_LOAD_TIMEOUT_MS = int(os.environ.get("CLAUDE_LOAD_TIMEOUT_MS", "120000"))
 
+# 한 항목 판정(3단계 전체)의 상한 시간(초). 초과하면 그 항목만 오류로 처리하고 넘어간다.
+# 주의: CLI 콜드스타트(CLI_LOAD_TIMEOUT_MS=120s)나 웹검색 단계가 겹치면 1분을 넘을 수 있다.
+# 그런 환경은 VCHECKER_JUDGE_TIMEOUT(초)로 상향한다.
+JUDGE_TIMEOUT_SEC = float(os.environ.get("VCHECKER_JUDGE_TIMEOUT", "60"))
+
 # ── 모델 ────────────────────────────────────────────────────────
 # 보안 판단 정확도를 위해 Opus 4.8 기본. (비용 절감 시 claude-sonnet-4-6)
 MODEL = os.environ.get("WAS_DIAG_MODEL", "claude-opus-4-8")
@@ -80,6 +85,14 @@ R_PASS = "양호"
 R_VULN = "취약"
 R_NA = "N/A"
 VALID_RESULTS = (R_PASS, R_VULN, R_NA)
+
+
+def final_result(confirmed: str, script: str) -> str:
+    """최종 결과 선택 규칙: 확정값 우선, 없으면 스크립트결과(양쪽 공백 무시).
+
+    보고서/Run/비교가 공유하는 단일 규칙. 빈 문자열 또는 공백뿐이면 다음으로 폴백.
+    """
+    return (confirmed or "").strip() or (script or "").strip()
 
 # ── CSV(로우데이터) 컬럼 ────────────────────────────────────────
 # was_diag.sh 가 출력하는 실제 헤더
@@ -93,15 +106,6 @@ CSV_COLUMNS = [
 #  - 진단대상IP/중요도 등은 대시보드·보고서에서 원본 df로 채우고 AI엔 안 넘긴다.
 AI_INPUT_COLUMNS = [
     "항목코드", "항목", "판단기준", "진단대상", "점검내용", "점검파일",
-]
-
-# 대시보드 테이블에 띄울 컬럼 (스크립트 결과 vs AI 결과 비교 포함)
-DASHBOARD_COLUMNS = [
-    "항목코드", "분류", "항목", "중요도",
-    "스크립트결과",  # 스크립트 자체 판정
-    "AI결과",        # AI 판단 결과
-    "일치여부",
-    "진단대상", "진단대상IP",
 ]
 
 # 최종 보고서(Excel) 컬럼

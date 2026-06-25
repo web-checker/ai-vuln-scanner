@@ -22,7 +22,6 @@ export function uploadCsv(file, runKind = '최초진단') {
 // ── 자산관리 / 비교 ──
 export const getAssets = () => jfetch('/api/assets')
 export const getAssetRuns = (assetId) => jfetch(`/api/assets/${encodeURIComponent(assetId)}/runs`)
-export const getRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`)
 export const deleteRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' })
 export const deleteAsset = (assetId) => jfetch(`/api/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' })
 export const getCompare = (base, target) =>
@@ -55,8 +54,6 @@ export const resetSession = (session_id) =>
   })
 
 export const reportXlsxUrl = (sid) => `/api/report.xlsx?session_id=${sid}`
-
-export const getReport = (sid) => jfetch(`/api/report?session_id=${sid}`)
 
 // AI 판정 스트림(NDJSON). for await (const ev of judgeStream(sid)) { ... }
 export async function* judgeStream(session_id, mode = 'pending') {

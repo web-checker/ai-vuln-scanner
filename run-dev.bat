@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-REM ===== V-CHECKER dev run : backend(8000) + frontend(5173), auto-reload =====
+REM ===== V-CHECKER dev run : backend(8600) + frontend(5173), auto-reload =====
 
 where node >nul 2>nul
 if errorlevel 1 (

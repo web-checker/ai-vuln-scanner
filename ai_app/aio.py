@@ -26,8 +26,14 @@ def _new_loop() -> asyncio.AbstractEventLoop:
     return asyncio.new_event_loop()
 
 
-def run(async_func: Callable[..., Awaitable[Any]], *args: Any) -> Any:
-    """async 함수를 전용 스레드의 새 이벤트 루프에서 실행하고 결과를 반환."""
+def run(async_func: Callable[..., Awaitable[Any]], *args: Any,
+        timeout: float | None = None) -> Any:
+    """async 함수를 전용 스레드의 새 이벤트 루프에서 실행하고 결과를 반환.
+
+    timeout(초)을 주면 그 시간 안에 끝나지 않을 때 TimeoutError 를 던진다.
+    (데몬 스레드라 호출자는 즉시 풀려나고, 멈춘 작업은 백그라운드에서 정리된다.)
+    None 이면 무한 대기(기존 동작).
+    """
     box: dict[str, Any] = {}
 
     def _worker() -> None:
@@ -42,7 +48,9 @@ def run(async_func: Callable[..., Awaitable[Any]], *args: Any) -> Any:
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
-    t.join()
+    t.join(timeout)
+    if t.is_alive():
+        raise TimeoutError(f"비동기 작업이 제한시간({timeout}s) 내에 끝나지 않았습니다.")
     if "error" in box:
         raise box["error"]
     return box.get("value")

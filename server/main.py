@@ -5,7 +5,7 @@ V-CHECKER 백엔드 API (FastAPI)
 React 프론트엔드에 JSON/파일로 제공한다.
 
 실행:
-    uvicorn server.main:app --reload --port 8000
+    uvicorn server.main:app --reload --port 8600
 흐름:
     /api/upload  → CSV 전처리(세션 생성)
     /api/judge   → AI 교차 진단(항목별 스트리밍)
@@ -46,6 +46,13 @@ app.add_middleware(
 SESSIONS: dict[str, dict] = {}
 
 
+def _match_label(ai_res: str, script: str) -> str:
+    """AI 결과 vs 스크립트 결과 일치 라벨. AI 미판정이면 '미판정'."""
+    if not ai_res:
+        return "미판정"
+    return "일치" if ai_res == script else "불일치"
+
+
 def _get(sid: str) -> dict:
     state = SESSIONS.get(sid)
     if state is None:
@@ -67,8 +74,21 @@ def _flush(state: dict) -> None:
                    state.get("filename", ""), run_df)
 
 
+def _item_payload(*, code, group, name, severity, criteria, check, target, ip,
+                  script, ai, reason, source, confidence,
+                  decided, final_result, final_reason) -> dict:
+    """대시보드 항목 페이로드(세션·Run 공통 형태). match는 여기서 계산."""
+    return {
+        "code": code, "group": group, "name": name, "severity": severity,
+        "criteria": criteria, "check": check, "target": target, "ip": ip,
+        "script": script, "ai": ai, "reason": reason, "source": source,
+        "confidence": confidence, "match": _match_label(ai, script),
+        "decided": decided, "finalResult": final_result, "finalReason": final_reason,
+    }
+
+
 def _items_payload(state: dict) -> list[dict]:
-    """프론트가 표/리스트/디테일에 쓸 통합 항목 목록."""
+    """프론트가 표/리스트/디테일에 쓸 통합 항목 목록(세션 상태 기준)."""
     df = state["df"]
     ai = state["ai_results"]
     dec = state["decisions"]
@@ -77,28 +97,16 @@ def _items_payload(state: dict) -> list[dict]:
         code = row.get("항목코드", "")
         a = ai.get(code, {})
         d = dec.get(code, {})
-        script = row.get("결과", "")
-        ai_res = a.get("result", "")
-        match = "미판정" if not ai_res else ("일치" if ai_res == script else "불일치")
-        out.append({
-            "code": code,
-            "group": row.get("분류", ""),
-            "name": row.get("항목", ""),
-            "severity": row.get("중요도", ""),
-            "criteria": row.get("판단기준", ""),
-            "check": preprocess.restore_multiline(row.get("점검내용", "")),
-            "target": row.get("진단대상", ""),
-            "ip": row.get("진단대상IP", ""),
-            "script": script,
-            "ai": ai_res,
-            "reason": a.get("reason", ""),
-            "source": a.get("source", ""),
-            "confidence": a.get("confidence", ""),
-            "match": match,
-            "decided": bool(d),
-            "finalResult": d.get("result", ""),
-            "finalReason": d.get("reason", ""),
-        })
+        out.append(_item_payload(
+            code=code, group=row.get("분류", ""), name=row.get("항목", ""),
+            severity=row.get("중요도", ""), criteria=row.get("판단기준", ""),
+            check=preprocess.restore_multiline(row.get("점검내용", "")),
+            target=row.get("진단대상", ""), ip=row.get("진단대상IP", ""),
+            script=row.get("결과", ""), ai=a.get("result", ""),
+            reason=a.get("reason", ""), source=a.get("source", ""),
+            confidence=a.get("confidence", ""), decided=bool(d),
+            final_result=d.get("result", ""), final_reason=d.get("reason", ""),
+        ))
     return out
 
 
@@ -293,20 +301,15 @@ def _run_items_payload(run_df) -> list[dict]:
     """Run CSV(RUN_COLUMNS)를 대시보드 항목 페이로드로 변환(읽기전용 조회용)."""
     out = []
     for _, r in run_df.iterrows():
-        script = r.get("스크립트결과", "")
-        ai_res = r.get("AI결과", "")
-        final = r.get("확정결과", "")
-        match = "미판정" if not ai_res else ("일치" if ai_res == script else "불일치")
-        out.append({
-            "code": r.get("항목코드", ""), "group": r.get("분류", ""),
-            "name": r.get("항목", ""), "severity": r.get("중요도", ""),
-            "criteria": r.get("판단기준", ""), "check": "",
-            "target": r.get("진단대상", ""), "ip": r.get("진단대상IP", ""),
-            "script": script, "ai": ai_res, "reason": r.get("AI근거", ""),
-            "source": "", "confidence": "", "match": match,
-            "decided": bool(str(r.get("확정여부", "")).strip()),
-            "finalResult": final, "finalReason": r.get("확정근거", ""),
-        })
+        out.append(_item_payload(
+            code=r.get("항목코드", ""), group=r.get("분류", ""), name=r.get("항목", ""),
+            severity=r.get("중요도", ""), criteria=r.get("판단기준", ""), check="",
+            target=r.get("진단대상", ""), ip=r.get("진단대상IP", ""),
+            script=r.get("스크립트결과", ""), ai=r.get("AI결과", ""),
+            reason=r.get("AI근거", ""), source="", confidence="",
+            decided=bool(str(r.get("확정여부", "")).strip()),
+            final_result=r.get("확정결과", ""), final_reason=r.get("확정근거", ""),
+        ))
     return out
 
 

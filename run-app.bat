@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-REM ===== V-CHECKER easy run : one window, one URL (http://localhost:8000) =====
+REM ===== V-CHECKER easy run : one window, one URL (http://localhost:8600) =====
 
 where node >nul 2>nul
 if errorlevel 1 (

@@ -139,9 +139,8 @@ def new_run_id() -> str:
 
 
 def _final_result(row: pd.Series) -> str:
-    """확정결과 우선, 없으면 스크립트결과(기존 _final_decisions 규칙과 동일)."""
-    fin = str(row.get("확정결과", "") or "").strip()
-    return fin or str(row.get("스크립트결과", "") or "").strip()
+    """확정결과 우선, 없으면 스크립트결과(config.final_result 공통 규칙)."""
+    return config.final_result(row.get("확정결과", ""), row.get("스크립트결과", ""))
 
 
 def build_run_df(df: pd.DataFrame, ai_results: dict[str, dict], decisions: dict[str, dict]) -> pd.DataFrame:
