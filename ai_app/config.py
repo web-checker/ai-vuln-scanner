@@ -20,6 +20,30 @@ GUIDE_DIR = next(
     ROOT_DIR / "guideline",
 )
 
+<<<<<<< Updated upstream
+=======
+# ── 영속 저장소(로컬 CSV) ──────────────────────────────────────
+# 진단대상(자산)·진단실행(Run)을 재시작 후에도 유지하기 위한 CSV 저장소.
+# CSV_*는 인덱스(레지스트리), runs/{asset_id}/{run_id}.csv 는 Run별 항목결과.
+# (DATA_DIR는 store.py 가 최초 접근 시 생성한다)
+DATA_DIR = Path(os.environ.get("VCHECKER_DATA_DIR", str(ROOT_DIR / "data")))
+ASSETS_CSV = DATA_DIR / "assets.csv"
+RUNS_INDEX_CSV = DATA_DIR / "runs_index.csv"
+RUNS_DIR = DATA_DIR / "runs"
+# 최종 보고서 HTML 영속 저장소(추후 '저장된 보고서 불러오기' 기능에서 run_id로 조회).
+#   reports/{run_id}.html        보고서 본문(자체 완결형 HTML)
+#   reports_index.csv            보고서 메타(인덱스)
+# 다운로드 폴더는 자동 정리로 사라질 수 있어, 보고서는 이 '특정 경로'에 영속 저장한다.
+# VCHECKER_REPORTS_DIR 로 위치를 바꿀 수 있다(예: C:\\취약점진단_보고서).
+REPORTS_DIR = Path(os.environ.get("VCHECKER_REPORTS_DIR", str(DATA_DIR / "reports")))
+REPORTS_INDEX_CSV = DATA_DIR / "reports_index.csv"
+
+# Run 종류(최초진단/이행점검). 업로드 시 사용자가 수동 선택한다.
+RUN_FIRST = "최초진단"
+RUN_FOLLOWUP = "이행점검"
+VALID_RUN_KINDS = (RUN_FIRST, RUN_FOLLOWUP)
+
+>>>>>>> Stashed changes
 # ── 실행 방식 ───────────────────────────────────────────────────
 # claude_agent_sdk + 로컬 claude CLI(구독 인증)만 사용한다. API 키/종량제 과금 없음.
 # claude CLI '전체 경로'를 자동 탐지한다 — 파이썬 서버(uvicorn) 프로세스는 셸 PATH/별칭을
