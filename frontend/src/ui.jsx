@@ -7,6 +7,10 @@ export const VALID = ['양호', '취약', 'N/A']
 export const matchLabel = (ai, script) =>
   !ai ? '미판정' : ai === script ? '일치' : '불일치'
 
+// 판단기준의 ' | ' 구분(양호 내용 | 취약 내용)을 줄바꿈으로 변환
+export const formatCriteria = (text) =>
+  String(text || '').split('|').map((s) => s.trim()).filter(Boolean).join('\n')
+
 // 공통 포맷 헬퍼
 export const fmtDateTime = (at) => (at || '').slice(0, 16).replace('T', ' ')
 export const fmtRunOpt = (r) => `${r.kind} · ${fmtDateTime(r.at)} · ${r.filename}`

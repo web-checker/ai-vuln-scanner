@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, MoonIcon, Pill, VALID, matchLabel } from './ui.jsx'
+import { Kpi, MoonIcon, Pill, VALID, matchLabel, formatCriteria } from './ui.jsx'
 import { Chart, Donut, VulnCompare } from './charts.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
@@ -11,6 +11,18 @@ import SaveAssetModal from './SaveAssetModal.jsx'
 const prefResult = (it) =>
   it.finalResult || (VALID.includes(it.script) ? it.script : '') ||
   (VALID.includes(it.ai) ? it.ai : '') || 'N/A'
+
+// 스크립트/AI 중 하나라도 취약이면 조치방법 표기(양호·N/A 단독이면 공란)
+const isVuln = (it) => it.script === '취약' || it.ai === '취약'
+
+// 판단근거 머리에 결과 라벨(양호 / 취약)을 한 줄로 붙이고, 근거 줄은 2칸 들여써 정렬
+const labelReason = (result, reason) => {
+  const body = String(reason || '').trim()
+  const head = `${result || 'N/A'}`
+  if (!body) return head
+  const indented = body.split('\n').map((ln) => (ln.trim() ? '  ' + ln : ln)).join('\n')
+  return `${head}\n${indented}`
+}
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function App() {
@@ -82,7 +94,8 @@ export default function App() {
         else if (ev.event === 'item') {
           setProgress({ done: ev.done, total: ev.total })
           setItems((prev) => prev.map((it) => it.code === ev.code
-            ? { ...it, ai: ev.result, reason: ev.reason, source: ev.source, confidence: ev.confidence,
+            ? { ...it, ai: ev.result, reason: ev.reason, remediation: ev.remediation,
+                source: ev.source, confidence: ev.confidence,
                 match: matchLabel(ev.result, it.script) }
             : it))
         }
@@ -279,9 +292,9 @@ export default function App() {
               <table className="report">
                 <thead>
                   <tr>
-                    <th>항목코드</th><th>분류</th><th>항목</th><th>판단 기준</th>
-                    <th className="c">결과</th><th>판단 근거</th>
-                    <th className="c">진단 대상</th><th className="c">진단 대상 IP</th><th className="c">중요도</th>
+                    <th>항목코드</th><th>분류</th><th className="c">중요도</th><th>항목</th><th>판단 기준</th>
+                    <th className="c">결과</th><th>판단 근거</th><th>조치 방법</th>
+                    <th className="c">진단 대상</th><th className="c">진단 대상 IP</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -292,13 +305,14 @@ export default function App() {
                       <tr key={it.code}>
                         <td className="code">{it.code}</td>
                         <td>{it.group}</td>
+                        <td className="c"><span className={`sev ${it.severity}`}>{it.severity}</span></td>
                         <td className="nm">{it.name}</td>
-                        <td className="reason" style={{ minWidth: 240 }}>{it.criteria}</td>
+                        <td className="reason" style={{ minWidth: 240 }}>{formatCriteria(it.criteria)}</td>
                         <td className="c"><Pill v={r} /></td>
-                        <td className="reason">{reason}</td>
+                        <td className="reason">{labelReason(r, reason)}</td>
+                        <td className="reason">{isVuln(it) ? (it.remediation || '') : ''}</td>
                         <td className="c">{it.target}</td>
                         <td className="c">{it.ip}</td>
-                        <td className="c"><span className={`sev ${it.severity}`}>{it.severity}</span></td>
                       </tr>
                     )
                   })}

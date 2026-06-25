@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 # ai_app 패키지 import 보장(프로젝트 루트를 경로에 추가)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from ai_app import backend, config, preprocess, report, store  # noqa: E402
+from ai_app import backend, config, guide_index, preprocess, report, store  # noqa: E402
 
 app = FastAPI(title="CHECKER 대시보드")
 
@@ -53,6 +53,35 @@ def _match_label(ai_res: str, script: str) -> str:
     return "일치" if ai_res == script else "불일치"
 
 
+def _guide_remed(code: str) -> str:
+    """가이드 PDF의 '조치 방법' 절을 로직으로 매핑(폴백용)."""
+    path = config.guide_pdf_for_code(code)
+    if path is None:
+        return ""
+    try:
+        txt = guide_index.remediation_section(str(path), code)
+    except Exception:  # noqa: BLE001  (PDF 파싱 실패는 무시)
+        return ""
+    return f"[가이드 권고]\n{txt}" if txt else ""
+
+
+def _prefill_remed(df) -> dict[str, str]:
+    """AI 판정 전 '조치방법' 미리채움 매핑 {항목코드: 조치문}.
+
+    1순위: 스크립트가 뽑은 CSV의 '조치방법' 열(있고 값이 있으면 그대로 사용).
+    2순위: 가이드 PDF의 '조치 방법' 절 자동 추출(CSV에 열이 없거나 비었을 때 폴백).
+    AI 판정이 끝나면 항목별 맞춤 조치문으로 덮어쓴다(ai_results 우선).
+    """
+    col = config.CSV_REMEDIATION_COLUMN
+    has_col = col in df.columns
+    out: dict[str, str] = {}
+    for _, row in df.iterrows():
+        code = row.get("항목코드", "")
+        csv_remed = (row.get(col, "") or "").strip() if has_col else ""
+        out[code] = csv_remed or _guide_remed(code)
+    return out
+
+
 def _get(sid: str) -> dict:
     state = SESSIONS.get(sid)
     if state is None:
@@ -69,20 +98,21 @@ def _flush(state: dict) -> None:
     """
     if not state.get("persist"):
         return
-    run_df = store.build_run_df(state["df"], state["ai_results"], state["decisions"])
+    run_df = store.build_run_df(state["df"], state["ai_results"], state["decisions"],
+                                state.get("guide_remed"))
     store.save_run(state["asset_id"], state["run_id"], state["kind"],
                    state.get("filename", ""), run_df)
 
 
 def _item_payload(*, code, group, name, severity, criteria, check, target, ip,
-                  script, ai, reason, source, confidence,
+                  script, ai, reason, remediation, source, confidence,
                   decided, final_result, final_reason) -> dict:
     """대시보드 항목 페이로드(세션·Run 공통 형태). match는 여기서 계산."""
     return {
         "code": code, "group": group, "name": name, "severity": severity,
         "criteria": criteria, "check": check, "target": target, "ip": ip,
-        "script": script, "ai": ai, "reason": reason, "source": source,
-        "confidence": confidence, "match": _match_label(ai, script),
+        "script": script, "ai": ai, "reason": reason, "remediation": remediation,
+        "source": source, "confidence": confidence, "match": _match_label(ai, script),
         "decided": decided, "finalResult": final_result, "finalReason": final_reason,
     }
 
@@ -92,6 +122,7 @@ def _items_payload(state: dict) -> list[dict]:
     df = state["df"]
     ai = state["ai_results"]
     dec = state["decisions"]
+    gr = state.get("guide_remed", {})
     out = []
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
@@ -103,7 +134,8 @@ def _items_payload(state: dict) -> list[dict]:
             check=preprocess.restore_multiline(row.get("점검내용", "")),
             target=row.get("진단대상", ""), ip=row.get("진단대상IP", ""),
             script=row.get("결과", ""), ai=a.get("result", ""),
-            reason=a.get("reason", ""), source=a.get("source", ""),
+            reason=a.get("reason", ""), remediation=a.get("remediation") or gr.get(code, ""),
+            source=a.get("source", ""),
             confidence=a.get("confidence", ""), decided=bool(d),
             final_result=d.get("result", ""), final_reason=d.get("reason", ""),
         ))
@@ -126,14 +158,23 @@ def _summary(state: dict) -> dict:
 
 
 def _final_decisions(state: dict) -> dict:
-    """보고서용: 확정값 우선, 미확정은 자동화 스크립트 결과 + 참고용 AI 근거."""
+    """보고서용: 확정값 우선, 미확정은 자동화 스크립트 결과 + 참고용 AI 근거.
+
+    조치방법은 AI 산출값 우선, 없으면 가이드 매핑(pre-fill). 스크립트/AI 중
+    하나라도 취약이면 vuln_any=True 로 표기 대상이 된다.
+    """
     df = state["df"]
     ai = state["ai_results"]
     dec = state["decisions"]
+    gr = state.get("guide_remed", {})
     script_by = {row.get("항목코드", ""): row.get("결과", "") for _, row in df.iterrows()}
-    fd = dict(dec)
+    fd = {}
     for code, script in script_by.items():
-        fd.setdefault(code, {"result": script, "reason": ai.get(code, {}).get("reason", "")})
+        a = ai.get(code, {})
+        entry = dict(dec[code]) if code in dec else {"result": script, "reason": a.get("reason", "")}
+        entry["remediation"] = a.get("remediation") or gr.get(code, "")
+        entry["vuln_any"] = config.R_VULN in (script, a.get("result", ""))
+        fd[code] = entry
     return fd
 
 
@@ -179,6 +220,9 @@ async def upload(file: UploadFile = File(...), run_kind: str = Form(config.RUN_F
 
     SESSIONS[sid] = {
         "df": df, "items": items, "ai_results": {}, "decisions": {},
+        # 업로드 즉시 '조치방법' 미리채움: CSV의 조치방법 열 우선(없으면 가이드 매핑).
+        # AI 판정 시 항목별 맞춤값으로 갱신.
+        "guide_remed": _prefill_remed(df),
         "asset_id": asset_id, "run_id": run_id, "kind": run_kind,
         "filename": file.filename, "name": name, "ip": ip, "group": group,
         "persist": False,
@@ -218,6 +262,7 @@ def judge(req: JudgeReq):
             done += 1
             yield json.dumps({"event": "item", "code": code,
                               "result": res.get("result", ""), "reason": res.get("reason", ""),
+                              "remediation": res.get("remediation", ""),
                               "source": res.get("source", ""), "confidence": res.get("confidence", ""),
                               "done": done, "total": total}, ensure_ascii=False) + "\n"
         _flush(state)  # AI 판정 결과를 Run CSV에 반영
@@ -306,7 +351,8 @@ def _run_items_payload(run_df) -> list[dict]:
             severity=r.get("중요도", ""), criteria=r.get("판단기준", ""), check="",
             target=r.get("진단대상", ""), ip=r.get("진단대상IP", ""),
             script=r.get("스크립트결과", ""), ai=r.get("AI결과", ""),
-            reason=r.get("AI근거", ""), source="", confidence="",
+            reason=r.get("AI근거", ""), remediation=r.get("조치방법", ""),
+            source="", confidence="",
             decided=bool(str(r.get("확정여부", "")).strip()),
             final_result=r.get("확정결과", ""), final_reason=r.get("확정근거", ""),
         ))

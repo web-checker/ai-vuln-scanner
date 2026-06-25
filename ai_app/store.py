@@ -143,10 +143,12 @@ def _final_result(row: pd.Series) -> str:
     return config.final_result(row.get("확정결과", ""), row.get("스크립트결과", ""))
 
 
-def build_run_df(df: pd.DataFrame, ai_results: dict[str, dict], decisions: dict[str, dict]) -> pd.DataFrame:
-    """세션 상태(원본 df + AI결과 + 확정)를 RUN_COLUMNS DataFrame으로 조립."""
+def build_run_df(df: pd.DataFrame, ai_results: dict[str, dict], decisions: dict[str, dict],
+                 guide_remed: dict[str, str] | None = None) -> pd.DataFrame:
+    """세션 상태(원본 df + AI결과 + 확정 + 조치방법)를 RUN_COLUMNS DataFrame으로 조립."""
     from .preprocess import restore_multiline
 
+    gr = guide_remed or {}
     rows = []
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
@@ -163,6 +165,8 @@ def build_run_df(df: pd.DataFrame, ai_results: dict[str, dict], decisions: dict[
             "스크립트결과": row.get("결과", ""),
             "AI결과": ai.get("result", ""),
             "AI근거": ai.get("reason", "") or restore_multiline(row.get("점검내용", "")),
+            # 조치방법: AI 산출값 우선, 없으면 가이드 매핑(pre-fill)
+            "조치방법": ai.get("remediation") or gr.get(code, ""),
             "확정결과": dec.get("result", ""),
             "확정근거": dec.get("reason", ""),
             "확정여부": "Y" if dec else "",

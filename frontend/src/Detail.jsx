@@ -1,13 +1,13 @@
 // 마스터-디테일의 디테일 패널: 선택 항목의 스크립트·AI 판단 비교 + 최종 확정.
 import React, { useEffect, useState } from 'react'
-import { Pill, VALID } from './ui.jsx'
+import { Pill, VALID, formatCriteria } from './ui.jsx'
 
 export default function Detail({ item, edit, setEdit, onSave, saved }) {
   const [showFull, setShowFull] = useState(false)
   useEffect(() => { setShowFull(false) }, [item?.code])
   if (!item) return <div className="detail-empty">← 왼쪽에서 항목을 선택하세요</div>
 
-  const critLines = String(item.criteria || '판단기준 정보 없음').split('|').map((s) => s.trim()).filter(Boolean)
+  const critText = formatCriteria(item.criteria) || '판단기준 정보 없음'
   const check = String(item.check || '점검 내용 없음')
   const long = check.length > 160
 
@@ -20,7 +20,7 @@ export default function Detail({ item, edit, setEdit, onSave, saved }) {
         <div className="cmp">
           <div className="cmp-head"><span className="cmp-title">자동화 스크립트</span><Pill v={item.script} /></div>
           <div className="cmp-label">판단 근거</div>
-          <div className="cmp-text">{critLines.join('\n\n')}</div>
+          <div className="cmp-text">{critText}</div>
           <div className="cmp-label">확인 내용</div>
           <div className={`cmp-code${long && !showFull ? ' clamp' : ''}`}>{check}</div>
           {long && <button className="more-link" onClick={() => setShowFull((v) => !v)}>{showFull ? '접기 ▴' : '자세히 확인 ▾'}</button>}

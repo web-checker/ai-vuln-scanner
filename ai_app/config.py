@@ -72,9 +72,9 @@ CLAUDE_CLI_PATH = _detect_claude_cli()
 CLI_LOAD_TIMEOUT_MS = int(os.environ.get("CLAUDE_LOAD_TIMEOUT_MS", "120000"))
 
 # 한 항목 판정(3단계 전체)의 상한 시간(초). 초과하면 그 항목만 오류로 처리하고 넘어간다.
-# 주의: CLI 콜드스타트(CLI_LOAD_TIMEOUT_MS=120s)나 웹검색 단계가 겹치면 1분을 넘을 수 있다.
-# 그런 환경은 VCHECKER_JUDGE_TIMEOUT(초)로 상향한다.
-JUDGE_TIMEOUT_SEC = float(os.environ.get("VCHECKER_JUDGE_TIMEOUT", "60"))
+# 기본 2분(120s) — CLI 콜드스타트(CLI_LOAD_TIMEOUT_MS=120s)나 웹검색 단계를 감안한 값.
+# 더 느린 환경은 VCHECKER_JUDGE_TIMEOUT(초)로 상향한다.
+JUDGE_TIMEOUT_SEC = float(os.environ.get("VCHECKER_JUDGE_TIMEOUT", "120"))
 
 # ── 모델 ────────────────────────────────────────────────────────
 # 보안 판단 정확도를 위해 Opus 4.8 기본. (비용 절감 시 claude-sonnet-4-6)
@@ -95,11 +95,14 @@ def final_result(confirmed: str, script: str) -> str:
     return (confirmed or "").strip() or (script or "").strip()
 
 # ── CSV(로우데이터) 컬럼 ────────────────────────────────────────
-# was_diag.sh 가 출력하는 실제 헤더
+# was_diag.sh 가 출력하는 실제 헤더(필수 — load_csv 가 존재를 검증)
 CSV_COLUMNS = [
     "항목코드", "분류", "항목", "판단기준", "결과",
     "점검내용", "진단대상", "진단대상IP", "중요도", "점검파일",
 ]
+# (선택) 스크립트가 가이드 조치방법을 하드코딩해 넣는 열. 있으면 AI 판정 전
+#  보고서/엑셀의 '조치방법'을 이 값으로 미리 채운다(없으면 가이드 PDF 자동추출 폴백).
+CSV_REMEDIATION_COLUMN = "조치방법"
 
 # AI(LLM)에게 추론 재료로 넘길 컬럼 (토큰 절감 위해 6개로 축소)
 #  - '결과'(스크립트 자체 판정)는 넘기지 않는다 → AI가 독립 판단하도록.
@@ -110,10 +113,11 @@ AI_INPUT_COLUMNS = [
 
 # 최종 보고서(Excel) 컬럼
 REPORT_COLUMNS = [
-    "항목코드", "분류", "항목", "판단기준",
+    "항목코드", "분류", "중요도", "항목", "판단기준",
     "결과",        # 최종 결과(검토 후 확정)
-    "판단근거",    # AI 생성 + 사람 검토
-    "진단대상", "진단대상IP", "중요도",
+    "판단근거",    # AI 생성 + 사람 검토 ("· 양호/취약" 라벨 머리에 붙임)
+    "조치방법",    # 취약 항목만: 가이드 PDF 기반 AI 생성 조치문(양호/N/A는 공란)
+    "진단대상", "진단대상IP",
 ]
 
 # Run 영속 CSV 컬럼 — 보고서의 '상위집합'.
@@ -121,7 +125,7 @@ REPORT_COLUMNS = [
 # 스크립트결과/AI결과/확정결과를 한 행에 모두 보존한다.
 RUN_COLUMNS = [
     "항목코드", "분류", "항목", "판단기준", "중요도", "진단대상", "진단대상IP",
-    "스크립트결과", "AI결과", "AI근거",
+    "스크립트결과", "AI결과", "AI근거", "조치방법",
     "확정결과", "확정근거", "확정여부",
 ]
 

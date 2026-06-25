@@ -42,6 +42,16 @@ def build_csv_report(df: pd.DataFrame, decisions: dict[str, dict]) -> bytes:
     return to_csv_bytes(build_report_df(df, decisions))
 
 
+def _label_reason(result: str, reason: str) -> str:
+    """판단근거 머리에 결과 라벨('양호'/'취약')을 한 줄로 붙이고 근거를 잇는다."""
+    body = (reason or "").strip()
+    head = result or "N/A"
+    if not body:
+        return head
+    indented = "\n".join(("  " + ln if ln.strip() else ln) for ln in body.splitlines())
+    return f"{head}\n{indented}"
+
+
 def build_report_df(df: pd.DataFrame, decisions: dict[str, dict]) -> pd.DataFrame:
     """원본 CSV DataFrame + 확정 판정(decisions)을 보고서 DataFrame으로 변환."""
     rows = []
@@ -50,16 +60,20 @@ def build_report_df(df: pd.DataFrame, decisions: dict[str, dict]) -> pd.DataFram
         dec = decisions.get(code, {})
         result = config.final_result(dec.get("result", ""), row.get("결과", ""))
         reason = dec.get("reason") or restore_multiline(row.get("점검내용", ""))
+        remediation = dec.get("remediation", "")
+        # 조치방법은 스크립트/AI 중 하나라도 '취약'이면 표기(양호·N/A 단독이면 공란)
+        show_remed = dec.get("vuln_any", result == config.R_VULN)
         rows.append({
             "항목코드": code,
             "분류": row.get("분류", ""),
+            "중요도": row.get("중요도", ""),
             "항목": row.get("항목", ""),
-            "판단기준": row.get("판단기준", ""),
+            "판단기준": _crit_lines(row.get("판단기준", "")),
             "결과": result,
-            "판단근거": reason,
+            "판단근거": _label_reason(result, reason),
+            "조치방법": remediation if show_remed else "",
             "진단대상": row.get("진단대상", ""),
             "진단대상IP": row.get("진단대상IP", ""),
-            "중요도": row.get("중요도", ""),
         })
     return pd.DataFrame(rows, columns=config.REPORT_COLUMNS)
 
@@ -464,9 +478,9 @@ def _sheet_detail(ws, S, ctx):
     counts, ranges = ctx["counts"], ctx["ranges"]
     host = ctx["targets"][0]["hostname"]
     ws.sheet_view.showGridLines = False
-    _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 44, "E": 70, "F": 10, "G": 50})
+    _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 44, "E": 70, "F": 10, "G": 50, "H": 50})
     ws.row_dimensions[2].height = 26
-    ws.merge_cells("B2:G2")
+    ws.merge_cells("B2:H2")
     tc = ws.cell(row=2, column=2,
                  value=f"{REPORT_META['제목']} 상세 진단결과 ({counts['total']}항목)")
     tc.font = S["Font"](bold=True, size=13); tc.alignment = S["center"]
@@ -477,6 +491,7 @@ def _sheet_detail(ws, S, ctx):
     _hdr_merge(ws, S, 3, 5, 5, 5, "진단기준")
     _hdr_merge(ws, S, 3, 6, 5, 6, "결과")
     _hdr_merge(ws, S, 3, 7, 5, 7, "판단 근거")   # 비고 → 판단 근거
+    _hdr_merge(ws, S, 3, 8, 5, 8, "조치 방법")
     for d, rows, r1, r2 in ranges:
         for k, row in enumerate(rows):
             r = r1 + k
@@ -489,10 +504,11 @@ def _sheet_detail(ws, S, ctx):
             if f:
                 rc.fill = f
             ws.cell(row=r, column=7, value=row.get("판단근거"))
-        _box(ws, S, r1, 2, r2, 7, align=S["leftc"])
+            ws.cell(row=r, column=8, value=row.get("조치방법"))
+        _box(ws, S, r1, 2, r2, 8, align=S["leftc"])
         for rr in range(r1, r2 + 1):
             ws.cell(row=rr, column=3).alignment = S["center"]   # No.
             ws.cell(row=rr, column=6).alignment = S["center"]   # 결과
         _merge_label(ws, S, r1, r2, 2, d)
     ws.freeze_panes = "A6"
-    _auto_width(ws, per_col={"D": (24, 48), "E": (55, 100), "G": (24, 55), "B": (12, 18)})
+    _auto_width(ws, per_col={"D": (24, 48), "E": (55, 100), "G": (24, 55), "H": (24, 55), "B": (12, 18)})
