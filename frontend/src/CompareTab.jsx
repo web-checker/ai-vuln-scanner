@@ -1,11 +1,26 @@
 // 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 전이 상태 비교.
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, Pager } from './ui.jsx'
+import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, RUN_KINDS, Pager } from './ui.jsx'
 
-const PAGE_SIZE = 10   // 비교 결과 표 한 페이지 행 수(초과 시 번호식 페이지로 분할)
+const PAGE_SIZE = 10   // 한 페이지에 보이는 행 수(초과 시 번호식 페이지로 분할)
+
+// 비교 대상 카드 — 모듈 레벨에 두어 매 렌더마다 새 컴포넌트로 인식되어 리마운트되는 것을 막는다.
+function TargetCard({ label, run }) {
+  return (
+    <div className="cmp-target">
+      <div className="ct-label">{label}</div>
+      <span className={`pill ${run?.kind === RUN_FIRST ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
+      <div className="ct-meta">{fmtDateTime(run?.at)}</div>
+      <div className="ct-file">{run?.filename || '—'}</div>
+      <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
+    </div>
+  )
+}
 
 export default function CompareTab() {
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])  // 언마운트 후 async setState 차단
   const [assets, setAssets] = useState([])
   const [assetId, setAssetId] = useState('')
   const [runs, setRuns] = useState([])
@@ -44,19 +59,21 @@ export default function CompareTab() {
     if (!aid) { setRuns([]); setBase(''); setTarget(''); return }
     try {
       const r = await api.getAssetRuns(aid)
+      if (!mounted.current) return
       const rs = r.runs || []
       setRuns(rs)
       setBase(rs[0]?.run_id || '')
       setTarget(rs.length > 1 ? rs[rs.length - 1].run_id : (rs[0]?.run_id || ''))
-    } catch (e) { setErr(String(e.message || e)) }
+    } catch (e) { if (mounted.current) setErr(String(e.message || e)) }
   }
 
   useEffect(() => {
     api.getAssets().then((r) => {
+      if (!mounted.current) return
       const list = r.assets || []
       setAssets(list)
       if (list[0]) selectAsset(list[0].asset_id)
-    }).catch((e) => setErr(String(e.message || e)))
+    }).catch((e) => { if (mounted.current) setErr(String(e.message || e)) })
   }, [])
 
   async function runCompare() {
@@ -73,30 +90,21 @@ export default function CompareTab() {
   // 기준/비교 파일 옵션: 최초진단 그룹(위) → 이행점검 그룹(아래), 각 그룹은 시간순
   const byAtAsc = (a, b) => String(a.at || '').localeCompare(String(b.at || ''))
   const runOptions = () => {
-    const first = runs.filter((r) => r.kind === '최초진단').sort(byAtAsc)
-    const follow = runs.filter((r) => r.kind === '이행점검').sort(byAtAsc)
+    const first = runs.filter((r) => r.kind === RUN_FIRST).sort(byAtAsc)
+    const follow = runs.filter((r) => r.kind === RUN_FOLLOWUP).sort(byAtAsc)
     const grp = (label, list) => list.length > 0 && (
       <optgroup label={label}>
         {list.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
       </optgroup>
     )
-    return <>{grp('최초진단', first)}{grp('이행점검', follow)}</>
+    return <>{grp(RUN_FIRST, first)}{grp(RUN_FOLLOWUP, follow)}</>
   }
   const s = cmp?.summary || {}
   const rows = (cmp?.rows || []).filter((r) => filter === '전체' || r.상태 === filter)
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   const curPage = Math.min(page, pageCount - 1)
   const pagedRows = rows.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE)
-
-  const TargetCard = ({ label, run }) => (
-    <div className="cmp-target">
-      <div className="ct-label">{label}</div>
-      <span className={`pill ${run?.kind === '최초진단' ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
-      <div className="ct-meta">{fmtDateTime(run?.at)}</div>
-      <div className="ct-file">{run?.filename || '—'}</div>
-      <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
-    </div>
-  )
+  const runOpts = runOptions()   // 기준/비교 두 select 가 공유 — 렌더당 한 번만 계산
 
   return (
     <>
@@ -119,14 +127,14 @@ export default function CompareTab() {
           <div className="cmp-pick-field">
             <label>기준 파일</label>
             <select value={base} onChange={(e) => setBase(e.target.value)}>
-              {runOptions()}
+              {runOpts}
             </select>
           </div>
           <div className="cmp-vs">→</div>
           <div className="cmp-pick-field">
             <label>비교 파일</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {runOptions()}
+              {runOpts}
             </select>
           </div>
           <button className="btn primary" style={{ width: 'auto', padding: '11px 22px' }}
@@ -144,7 +152,7 @@ export default function CompareTab() {
               <div className="kind-row" key={r.run_id}>
                 <span className="kind-meta">{fmtDateTime(r.at)} · {r.filename}</span>
                 <div className="kind-toggle">
-                  {['최초진단', '이행점검'].map((k) => (
+                  {RUN_KINDS.map((k) => (
                     <button key={k} className={`sort-btn${r.kind === k ? ' on' : ''}`}
                       onClick={() => changeKind(r, k)}>{k}</button>
                   ))}

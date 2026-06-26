@@ -34,42 +34,43 @@ REPORT_META = {
 TARGET_DEFAULTS = {"버전정보": "-", "용도": "서버", "비고": "-"}
 
 
-# ════════════════════════════════════════════════════════════════
-#  CSV 보고서 (기존)
-# ════════════════════════════════════════════════════════════════
-def build_csv_report(df: pd.DataFrame, decisions: dict[str, dict]) -> bytes:
-    """원본 df + 확정 판정 → CSV 보고서 바이트."""
-    return to_csv_bytes(build_report_df(df, decisions))
-
-
 def _label_reason(result: str, reason: str) -> str:
     """판단근거 본문만 반환. 결과(양호/취약)는 '결과' 열에 이미 표기되므로 머리말은 붙이지 않는다."""
     return (reason or "").strip()
+
+
+def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: bool) -> dict:
+    """원본 CSV / Run CSV 공통 메타 컬럼 + 파생 판정값으로 보고서 행(REPORT_COLUMNS) 생성.
+
+    분류·중요도·항목·판단기준·진단대상(IP)은 두 소스가 같은 컬럼명을 쓰므로 그대로 읽고,
+    result/reason/remediation/show_remed 만 호출측이 소스별로 파생해 넘긴다.
+    조치방법은 show_remed(스크립트/AI 중 하나라도 취약)일 때만 표기.
+    """
+    return {
+        "항목코드": row.get("항목코드", ""),
+        "분류": row.get("분류", ""),
+        "중요도": row.get("중요도", ""),
+        "항목": row.get("항목", ""),
+        "판단기준": _crit_lines(row.get("판단기준", "")),
+        "결과": result,
+        "판단근거": _label_reason(result, reason),
+        "조치방법": remediation if show_remed else "",
+        "진단대상": row.get("진단대상", ""),
+        "진단대상IP": row.get("진단대상IP", ""),
+    }
 
 
 def build_report_df(df: pd.DataFrame, decisions: dict[str, dict]) -> pd.DataFrame:
     """원본 CSV DataFrame + 확정 판정(decisions)을 보고서 DataFrame으로 변환."""
     rows = []
     for _, row in df.iterrows():
-        code = row.get("항목코드", "")
-        dec = decisions.get(code, {})
+        dec = decisions.get(row.get("항목코드", ""), {})
         result = config.final_result(dec.get("result", ""), row.get("결과", ""))
         reason = dec.get("reason") or restore_multiline(row.get("점검내용", ""))
-        remediation = dec.get("remediation", "")
-        # 조치방법은 스크립트/AI 중 하나라도 '취약'이면 표기(양호·N/A 단독이면 공란)
-        show_remed = dec.get("vuln_any", result == config.R_VULN)
-        rows.append({
-            "항목코드": code,
-            "분류": row.get("분류", ""),
-            "중요도": row.get("중요도", ""),
-            "항목": row.get("항목", ""),
-            "판단기준": _crit_lines(row.get("판단기준", "")),
-            "결과": result,
-            "판단근거": _label_reason(result, reason),
-            "조치방법": remediation if show_remed else "",
-            "진단대상": row.get("진단대상", ""),
-            "진단대상IP": row.get("진단대상IP", ""),
-        })
+        rows.append(_report_row(
+            row, result=result, reason=reason,
+            remediation=dec.get("remediation", ""),
+            show_remed=dec.get("vuln_any", result == config.R_VULN)))
     return pd.DataFrame(rows, columns=config.REPORT_COLUMNS)
 
 
@@ -123,23 +124,13 @@ def build_report_df_from_run(run_df: pd.DataFrame) -> pd.DataFrame:
     """
     rows = []
     for _, r in run_df.iterrows():
-        script = r.get("스크립트결과", "")
-        ai = r.get("AI결과", "")
+        script, ai = r.get("스크립트결과", ""), r.get("AI결과", "")
         result = config.final_result(r.get("확정결과", ""), script)
         reason = r.get("확정근거", "") or r.get("AI근거", "")
-        show_remed = config.R_VULN in (script, ai)
-        rows.append({
-            "항목코드": r.get("항목코드", ""),
-            "분류": r.get("분류", ""),
-            "중요도": r.get("중요도", ""),
-            "항목": r.get("항목", ""),
-            "판단기준": _crit_lines(r.get("판단기준", "")),
-            "결과": result,
-            "판단근거": _label_reason(result, reason),
-            "조치방법": r.get("조치방법", "") if show_remed else "",
-            "진단대상": r.get("진단대상", ""),
-            "진단대상IP": r.get("진단대상IP", ""),
-        })
+        rows.append(_report_row(
+            r, result=result, reason=reason,
+            remediation=r.get("조치방법", ""),
+            show_remed=config.R_VULN in (script, ai)))
     return pd.DataFrame(rows, columns=config.REPORT_COLUMNS)
 
 
@@ -432,7 +423,8 @@ def _grouped(rdf: pd.DataFrame):
 
 
 def _counts(rdf: pd.DataFrame) -> dict:
-    res = [str(x) for x in rdf["결과"]]
+    # '결과' 컬럼이 없거나 빈 df 여도 KeyError 없이 0 집계(빈 보고서·임의 df 방어).
+    res = [str(x) for x in rdf["결과"]] if "결과" in rdf.columns else []
     p = res.count(config.R_PASS)
     v = res.count(config.R_VULN)
     n = res.count(config.R_NA)
@@ -466,45 +458,7 @@ def _crit_lines(text) -> str:
 
 
 # ── 서식 상수/헬퍼 ──────────────────────────────────────────────
-def _styles():
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    thin = Side(style="thin", color="BFBFBF")
-    return {
-        "hdr_fill": PatternFill("solid", fgColor="1F4E78"),
-        "hdr_font": Font(bold=True, color="FFFFFF"),
-        "pass": PatternFill("solid", fgColor="E2EFDA"),
-        "vuln": PatternFill("solid", fgColor="FCE4E4"),
-        "na": PatternFill("solid", fgColor="EDEDED"),
-        "border": Border(left=thin, right=thin, top=thin, bottom=thin),
-        "center": Alignment(horizontal="center", vertical="center", wrap_text=True),
-        "left": Alignment(horizontal="left", vertical="center", wrap_text=True),
-        "leftc": Alignment(horizontal="left", vertical="center", wrap_text=True),
-        "topleft": Alignment(horizontal="left", vertical="top", wrap_text=True),
-        "Font": Font, "Alignment": Alignment,
-    }
-    for idx, col in enumerate(df.columns, start=1):
-        letter = ws.cell(row=1, column=idx).column_letter
-        ws.column_dimensions[letter].width = widths.get(col, 16)
-        cell = ws.cell(row=1, column=idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(vertical="center", horizontal="center")
-
-    result_col = list(df.columns).index("결과") + 1
-    for r in range(2, len(df) + 2):
-        for c in range(1, len(df.columns) + 1):
-            ws.cell(row=r, column=c).alignment = Alignment(vertical="top", wrap_text=True)
-        result = ws.cell(row=r, column=result_col).value
-        fill = {config.R_PASS: pass_fill, config.R_VULN: vuln_fill, config.R_NA: na_fill}.get(result)
-        if fill:
-            ws.cell(row=r, column=result_col).fill = fill
-    ws.freeze_panes = "A2"
-
-
-# ── (이식) 정식 Excel 워크북 빌더 — origin/main 의 다중시트/차트 보고서 ──
-# build_xlsx_from_report_df → _build_workbook 가 사용. HTML 보고서의 _styles 와 충돌 방지 위해
-# 여기 _xlsx_styles 로 분리(원본 동작 동일).
-
+# Excel 워크북 빌더 — 다중시트/차트 보고서. build_xlsx_from_report_df → _build_workbook 가 사용.
 def _xlsx_styles():
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     thin = Side(style="thin", color="BFBFBF")

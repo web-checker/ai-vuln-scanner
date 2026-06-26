@@ -10,6 +10,14 @@ async function jfetch(url, opts) {
   return r.json()
 }
 
+// JSON 본문 POST 공통 헬퍼
+const jpost = (url, body) =>
+  jfetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
 export const getHealth = () => jfetch('/api/health')
 
 export function uploadCsv(file, runKind = '최초진단') {
@@ -27,48 +35,23 @@ export const deleteAsset = (assetId) => jfetch(`/api/assets/${encodeURIComponent
 export const getRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`)
 // 진단기록 종류(최초진단/이행점검) 변경 — 비교 탭에서 지정
 export const setRunKind = (runId, kind) =>
-  jfetch(`/api/runs/${encodeURIComponent(runId)}/kind`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind }),
-  })
+  jpost(`/api/runs/${encodeURIComponent(runId)}/kind`, { kind })
 export const getCompare = (base, target) =>
   jfetch(`/api/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`)
 export const compareCsvUrl = (base, target) =>
   `/api/compare.csv?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`
 
 // 현재 세션을 자산목록에 추가(영속화)
-export const saveAsset = (session_id) =>
-  jfetch('/api/asset/save', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id }),
-  })
+export const saveAsset = (session_id) => jpost('/api/asset/save', { session_id })
 
 export const getState = (sid) => jfetch(`/api/state?session_id=${sid}`)
 
 export const saveDecision = (session_id, code, result, reason) =>
-  jfetch('/api/decision', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id, code, result, reason }),
-  })
+  jpost('/api/decision', { session_id, code, result, reason })
 
-export const resetSession = (session_id) =>
-  jfetch('/api/reset', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id }),
-  })
+export const resetSession = (session_id) => jpost('/api/reset', { session_id })
 
 export const reportXlsxUrl = (sid) => `/api/report.xlsx?session_id=${sid}`
-
-// 최종 보고서를 HTML로 서버에 저장(추후 불러오기 가능). report_id 반환.
-export const saveReportHtml = (session_id) =>
-  jfetch('/api/report/save', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id }),
-  })
 
 // 저장된 Run의 최종 보고서를 HTML로 서버에 저장(report_id = run_id 반환)
 export const saveRunReportHtml = (runId) =>
@@ -84,12 +67,7 @@ export const savedReportUrl = (reportId, download = false) =>
   `/api/reports/${encodeURIComponent(reportId)}/report.html${download ? '?download=1' : ''}`
 
 // 진행 중인 AI 교차 진단 중지(다음 항목부터 토큰 사용 중단)
-export const cancelJudge = (session_id) =>
-  jfetch('/api/judge/cancel', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id }),
-  })
+export const cancelJudge = (session_id) => jpost('/api/judge/cancel', { session_id })
 
 // AI 판정 스트림(NDJSON). for await (const ev of judgeStream(sid)) { ... }
 export async function* judgeStream(session_id, mode = 'pending') {
@@ -113,4 +91,7 @@ export async function* judgeStream(session_id, mode = 'pending') {
       if (line) yield JSON.parse(line)
     }
   }
+  // 스트림 종료 시 개행으로 끝나지 않은 마지막 레코드도 처리(마지막 판정/end 이벤트 유실 방지).
+  const tail = buf.trim()
+  if (tail) yield JSON.parse(tail)
 }

@@ -19,18 +19,32 @@ import pandas as pd
 from . import config
 
 
+# 한글 Windows에서 들어올 수 있는 CSV 인코딩(우선순위).
+# was_diag.sh 는 utf-8-sig 를 내지만, 사용자가 Excel로 다시 저장하면 cp949(EUC-KR)가 흔하다.
+_CSV_ENCODINGS = ("utf-8-sig", "cp949")
+
+
+def _decode_csv(data: bytes) -> str:
+    """CSV 바이트를 인코딩 폴백 체인으로 디코드. 한글이 깨지더라도 예외로 죽지 않게 한다."""
+    for enc in _CSV_ENCODINGS:
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")  # 최후: 손실 허용(진단은 진행)
+
+
 def load_csv(source) -> pd.DataFrame:
     """CSV 경로 또는 파일 객체/바이트를 DataFrame으로 로드.
 
-    Excel 한글깨짐 방지용 UTF-8 BOM을 자동 처리(utf-8-sig)한다.
+    인코딩은 utf-8-sig(was_diag 기본) → cp949(Excel 재저장) 순으로 자동 폴백한다.
     """
     if isinstance(source, (str, Path)):
-        df = pd.read_csv(source, dtype=str, encoding="utf-8-sig", keep_default_na=False)
+        data = Path(source).read_bytes()
     else:
         data = source.read() if hasattr(source, "read") else source
-        if isinstance(data, bytes):
-            data = data.decode("utf-8-sig")
-        df = pd.read_csv(io.StringIO(data), dtype=str, keep_default_na=False)
+    text = _decode_csv(data) if isinstance(data, bytes) else data
+    df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
 
     df.columns = [c.strip() for c in df.columns]
     missing = [c for c in config.CSV_COLUMNS if c not in df.columns]

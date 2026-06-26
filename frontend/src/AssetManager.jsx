@@ -1,7 +1,7 @@
 // 자산관리: 대상 목록 → 진단기록 → (기록 클릭) 상세. 사이드바 트리로도 바로 진입 가능.
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { fmtDateTime, fmtRunOpt, TrashIcon, Pager } from './ui.jsx'
+import { fmtDateTime, fmtRunOpt, TrashIcon, RUN_FIRST, Pager } from './ui.jsx'
 import RunDetail from './RunDetail.jsx'
 
 const PAGE_SIZE = 10   // 표 한 페이지에 보이는 행 수(초과 시 번호식 페이지로 분할)
@@ -19,16 +19,20 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
   const [loading, setLoading] = useState(false)
   const toggleGroup = (fn) => setCollapsed((c) => ({ ...c, [fn]: !c[fn] }))
 
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])  // 언마운트 후 async setState 차단
+
   const loadAssets = () => {
     setLoading(true)
-    return api.getAssets().then((r) => setAssets(r.assets || []))
-      .catch((e) => setErr(String(e.message || e))).finally(() => setLoading(false))
+    return api.getAssets().then((r) => { if (mounted.current) setAssets(r.assets || []) })
+      .catch((e) => { if (mounted.current) setErr(String(e.message || e)) })
+      .finally(() => { if (mounted.current) setLoading(false) })
   }
   const reloadRuns = async (aid) => {
-    try { const r = await api.getAssetRuns(aid); setRuns(r.runs || []); return r.runs || [] }
-    catch (e) { setErr(String(e.message || e)); return [] }
+    try { const r = await api.getAssetRuns(aid); if (mounted.current) setRuns(r.runs || []); return r.runs || [] }
+    catch (e) { if (mounted.current) setErr(String(e.message || e)); return [] }
   }
-  useEffect(() => { loadAssets() }, [])
+  // 초기 로드는 아래 [assetsVersion] effect 가 마운트 시 함께 수행한다(중복 fetch 방지).
 
   // 가운데에서 파고들 때도 공유 target을 갱신 → 왼쪽 사이드바 트리가 함께 펼쳐짐
   function openAsset(a) { onNavigateAsset?.(a, null) }
@@ -151,7 +155,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
                   </tr>
                   {!collapsed[g.filename] && g.runs.map((r) => (
                     <tr key={r.run_id} style={{ cursor: 'pointer' }} onClick={() => openRun(r)} title="클릭하여 상세 보기">
-                      <td><span className={`pill ${r.kind === '최초진단' ? 'info' : 'warn'} sm`}>{r.kind}</span></td>
+                      <td><span className={`pill ${r.kind === RUN_FIRST ? 'info' : 'warn'} sm`}>{r.kind}</span></td>
                       <td className="code">{fmtDateTime(r.at)}</td>
                       <td className="c">{r.total}</td><td className="c">{r.vuln}</td>
                       <td className="c">{r.pass}</td><td className="c">{r.na}</td>
