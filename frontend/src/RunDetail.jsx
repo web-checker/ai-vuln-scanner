@@ -7,8 +7,6 @@ export default function RunDetail({ run, asset, dark, onBack }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
-  const [notice, setNotice] = useState('')
-  const [saving, setSaving] = useState(false)
   const [donutMode, setDonutMode] = useState('ai')
   const { sortKey, toggleSort, sortArrow, reportRows } = useReportSort(items)
 
@@ -36,19 +34,6 @@ export default function RunDetail({ run, asset, dark, onBack }) {
   const matched = judged.filter((it) => it.ai === it.script).length
   const matchRate = judged.length ? Math.round((matched / judged.length) * 100) : null
 
-  async function onSaveReport() {
-    if (saving) return
-    setSaving(true); setErr('')
-    try {
-      const res = await api.saveRunReportHtml(run.run_id)
-      setNotice(`보고서가 저장되었습니다 → ${res.path}`)
-      setTimeout(() => setNotice(''), 8000)
-      window.open(api.savedReportUrl(res.report_id), '_blank', 'noopener')
-    } catch (e) { setErr(String(e.message || e)) }
-    finally { setSaving(false) }
-  }
-
-
   return (
     <>
       <div className="detail-bar">
@@ -56,7 +41,6 @@ export default function RunDetail({ run, asset, dark, onBack }) {
         <button className="sort-btn" onClick={onBack}>← 진단 기록</button>
       </div>
 
-      {notice && <div className="notice">{notice}</div>}
       {err && <div className="err">{err}</div>}
 
       {loading ? (
@@ -75,12 +59,6 @@ export default function RunDetail({ run, asset, dark, onBack }) {
               <ReportSortButtons sortKey={sortKey} toggleSort={toggleSort} sortArrow={sortArrow} />
             </div>
             <ReportTable rows={reportRows} />
-            <div className="report-actions">
-              <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}
-                onClick={onSaveReport} disabled={saving}>
-                {saving ? '저장 중…' : '🗎 보고서 저장 (HTML)'}
-              </button>
-            </div>
           </section>
         </>
       )}

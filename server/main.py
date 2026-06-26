@@ -108,9 +108,9 @@ def _prefill_remed(df) -> dict[str, str]:
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
         csv_remed = (row.get(col, "") or "").strip() if has_col else ""
-        # 조치방법은 CSV 하드코딩 값만 사용한다.
-        # [비활성화] 가이드 PDF '조치 방법' 절 자동추출 폴백(_guide_remed)은 보존만.
-        #   재활성화하려면 아랫줄을 'csv_remed or _guide_remed(code)' 로 교체.
+        # CSV 조치방법 우선. 없으면 가이드 PDF '조치 방법' 절 자동추출(보고서 표기 대상인 취약 항목만).
+        if not csv_remed and (row.get("결과", "") or "").strip() == config.R_VULN:
+            csv_remed = _guide_remed(code)
         out[code] = csv_remed
     return out
 
@@ -572,6 +572,44 @@ def compare_csv(base: str, target: str, asset_id: str = ""):
         media_type="text/csv; charset=utf-8",
         headers=_attachment_headers(f"compare_{base}_vs_{target}.csv"),
     )
+
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@app.get("/api/runs/{run_id}/report.xlsx")
+def run_report_xlsx(run_id: str):
+    """저장된 Run 1건(최초진단 등)의 5시트 엑셀 보고서 — 최초 보고서 다운로드용."""
+    run_df = store.load_run_df(_safe_run_id(run_id))
+    if run_df is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    data = report.build_xlsx_from_report_df(report.build_report_df_from_run(run_df))
+    name, _ip = _first_target(run_df)
+    return StreamingResponse(io.BytesIO(data), media_type=_XLSX_MEDIA,
+                             headers=_attachment_headers(f"report_{name or run_id}.xlsx"))
+
+
+@app.get("/api/final-report")
+def final_report(base: str, target: str):
+    """최초진단(base) ↔ 이행점검(target) 병합 최종 보고서 표 데이터(JSON)."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
+    bdf, tdf = store.load_run_df(base), store.load_run_df(target)
+    if bdf is None or tdf is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    return {"rows": report.build_final_report_rows(bdf, tdf)}
+
+
+@app.get("/api/final-report.xlsx")
+def final_report_xlsx(base: str, target: str):
+    """최종 보고서 5시트 엑셀 — 3-1 시트만 최초/최종 결과·근거 8컬럼."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
+    bdf, tdf = store.load_run_df(base), store.load_run_df(target)
+    if bdf is None or tdf is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    data = report.build_final_xlsx(bdf, tdf)
+    name, _ip = _first_target(bdf)
+    return StreamingResponse(io.BytesIO(data), media_type=_XLSX_MEDIA,
+                             headers=_attachment_headers(f"final_report_{name or base}.xlsx"))
 
 
 # ── (프로덕션) 빌드된 프론트 정적 서빙: frontend/dist 가 있을 때만 ──
