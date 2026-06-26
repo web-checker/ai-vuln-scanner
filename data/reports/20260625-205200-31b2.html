@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check방 취약점 진단 - 서버 취약점 진단 상세결과</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 24px 60px; background: #f4f6fb; color: #1f2738;
+    font-family: "Malgun Gothic","맑은 고딕",-apple-system,Segoe UI,Roboto,sans-serif; font-size: 13px; }
+  .doc { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: #5b677e; margin: 0 0 18px; font-weight: 600; }
+  .meta { flex: 1 1 0; min-width: 0; align-self: stretch; border-collapse: collapse; margin: 0; background: #fff;
+    border: 1px solid #cdd7e8; border-radius: 12px; overflow: hidden; }
+  .meta th, .meta td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e3e9f3; }
+  .meta th { background: #d6e2f5; color: #1c3f74; width: 84px; font-weight: 700; }
+  .meta td { font-weight: 500; background: #f3f7fd; }
+  .meta tr:last-child th, .meta tr:last-child td { border-bottom: 0; }
+  /* 요약: 메타표 + (총항목 + 양호/취약/N·A 세그먼트) + 보안 적용율 — 한 줄에 1/3씩 */
+  .summary { display: flex; gap: 14px; align-items: flex-start; margin: 0 0 22px; flex-wrap: wrap; }
+  .counts { flex: 1 1 0; min-width: 220px; background: #fff; border: 1px solid #cdd7e8;
+    border-radius: 12px; padding: 14px 16px; }
+  .totbar { display: flex; align-items: center; justify-content: center; height: 26px; padding: 0 12px;
+    border-radius: 7px; background: #1f4e78; color: #fff; font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+  .segbar { display: flex; gap: 3px; height: 46px; }
+  .seg { display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; min-width: 50px; border-radius: 7px; padding: 0 6px; }
+  .seg .segn { font-size: 18px; font-weight: 800; line-height: 1.05; }
+  .seg .segl { font-size: 11px; font-weight: 700; opacity: .95; }
+  .seg.s-pass { background: #2f9e54; }
+  .seg.s-vuln { background: #e23b3b; }
+  .seg.s-na { background: #9aa3b2; }
+  .appliedmini { flex: 1 1 0; min-width: 220px; align-self: stretch; background: #fff; border: 1px solid #cdd7e8;
+    border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; justify-content: center; }
+  .appliedmini .amlabel { color: #5b677e; font-weight: 700; font-size: 12px; }
+  .appliedmini .ampct { font-size: 22px; font-weight: 800; color: #1f4e78; margin: 2px 0 8px; }
+  .amtrack { height: 10px; background: #eef1f6; border-radius: 999px; overflow: hidden; }
+  .amfill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #2f9e54, #2563eb); }
+  table.report { width: 100%; border-collapse: collapse; background: #fff;
+    border: 1px solid #d8deea; border-radius: 10px; overflow: hidden; table-layout: fixed; }
+  .report th, .report td { padding: 9px 10px; border-bottom: 1px solid #eef1f6;
+    border-right: 1px solid #f1f3f8; vertical-align: middle; text-align: center; }
+  .report thead th { position: sticky; top: 0; background: #1f4e78; color: #fff;
+    font-weight: 700; text-align: center; white-space: nowrap; }
+  .report tbody tr:nth-child(even) { background: #fafbfe; }
+  .report .c { text-align: center; }
+  .report .code { font-family: ui-monospace,Consolas,monospace; white-space: nowrap; }
+  .report .nm { font-weight: 600; }
+  .wrap { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+  /* 열 너비: 긴 텍스트 열(판단기준/판단근거/조치방법)에 넉넉히 배분 */
+  col.c-code { width: 78px; } col.c-grp { width: 90px; } col.c-sev { width: 56px; }
+  col.c-nm { width: 150px; } col.c-crit { width: 16%; } col.c-res { width: 72px; }
+  col.c-reason { width: 24%; } col.c-remed { width: 22%; }
+  col.c-tgt { width: 90px; } col.c-ip { width: 110px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+  .pill.pass { background: #e2efda; color: #2f7d32; }
+  .pill.vuln { background: #fce4e4; color: #c0392b; }
+  .pill.na { background: #ededed; color: #555; }
+  .sev { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+  .sev.s-상 { background: #fde2e1; color: #c0392b; }
+  .sev.s-중 { background: #fef3d6; color: #b8860b; }
+  .sev.s-하 { background: #e3ecfb; color: #2563eb; }
+  @media print {
+    body { background: #fff; padding: 0; font-size: 11px; }
+    .report thead th { position: static; }
+    table.report, .meta { border-radius: 0; }
+  }
+</style></head>
+<body><div class="doc">
+  <h1>Check방 취약점 진단</h1>
+  <p class="sub">서버 취약점 진단 상세결과</p>
+  <div class="summary">
+    <table class="meta"><tr><th>진단 대상</th><td>WAS(Tomcat) (192.168.0.10)</td></tr><tr><th>진단 종류</th><td>최초진단</td></tr><tr><th>진단 일시</th><td>2026-06-25T20:52:10</td></tr><tr><th>원본 파일</th><td>was_diag_raw_TEST_sample.csv</td></tr></table>
+    <div class="counts">
+      <div class="totbar">총 3 항목</div>
+      <div class="segbar"><div class="seg s-pass" style="flex-grow:1"><span class="segn">1</span><span class="segl">양호</span></div><div class="seg s-vuln" style="flex-grow:2"><span class="segn">2</span><span class="segl">취약</span></div></div>
+    </div>
+    <div class="appliedmini">
+      <div class="amlabel">보안 적용율 (양호 / (양호 + 취약))</div>
+      <div class="ampct">33.3%</div>
+      <div class="amtrack"><div class="amfill" style="width:33.3%"></div></div>
+    </div>
+  </div>
+  <table class="report">
+    <colgroup>
+      <col class="c-code"><col class="c-grp"><col class="c-sev"><col class="c-nm">
+      <col class="c-crit"><col class="c-res"><col class="c-reason"><col class="c-remed">
+      <col class="c-tgt"><col class="c-ip">
+    </colgroup>
+    <thead><tr>
+      <th>항목코드</th><th>분류</th><th>중요도</th><th>항목</th><th>판단 기준</th>
+      <th>결과</th><th>판단 근거</th><th>조치 방법</th><th>진단 대상</th><th>진단 대상 IP</th>
+    </tr></thead>
+    <tbody><tr><td class="code">WEB-01</td><td>계정 관리</td><td class="c"><span class="sev s-상">상</span></td><td class="nm">Default 관리자 계정명 변경</td><td class="wrap">양호 : 관리자 페이지를 사용하지 않거나, 계정명이 기본 계정명으로 설정되어 있지 않은 경우<br>취약 : 계정명이 기본 계정명으로 설정되어 있거나, 추측하기 쉬운 문자 조합으로 이루어진 계정명을 사용하는 경우</td><td class="c"><span class="pill vuln">취약</span></td><td class="wrap">&lt;user username=&quot;admin&quot; password=&quot;********&quot; roles=&quot;manager-gui&quot;/&gt;</td><td class="wrap">기본 관리자 계정명을 추측하기 어려운 계정명으로 설정</td><td class="c">WAS(Tomcat)</td><td class="c">192.168.0.10</td></tr><tr><td class="code">WEB-02</td><td>계정 관리</td><td class="c"><span class="sev s-상">상</span></td><td class="nm">취약한 비밀번호 사용 제한</td><td class="wrap">양호 : 관리자 비밀번호가 암호화되어 있거나, 유추하기 어려운 비밀번호로 설정된 경우<br>취약 : 관리자 비밀번호가 암호화되어 있지 않거나, 유추하기 쉬운 비밀번호로 설정된 경우</td><td class="c"><span class="pill vuln">취약</span></td><td class="wrap">&lt;user username=&quot;admin&quot; password=&quot;********&quot; roles=&quot;manager-gui&quot;/&gt;<br>/opt/tomcat/conf/server.xml (digest 미적용)</td><td class="wrap">복잡도 기준에 맞는 추측하기 어려운 비밀번호 설정</td><td class="c">WAS(Tomcat)</td><td class="c">192.168.0.10</td></tr><tr><td class="code">WEB-03</td><td>계정 관리</td><td class="c"><span class="sev s-상">상</span></td><td class="nm">비밀번호 파일 권한 관리</td><td class="wrap">양호 : 비밀번호 파일에 권한이 600 이하로 설정된 경우<br>취약 : 비밀번호 파일에 권한이 600 초과로 설정된 경우</td><td class="c"><span class="pill pass">양호</span></td><td class="wrap">-rw------- (600) tomcat:tomcat  /opt/tomcat/conf/tomcat-users.xml</td><td class="wrap"></td><td class="c">WAS(Tomcat)</td><td class="c">192.168.0.10</td></tr></tbody>
+  </table>
+</div></body></html>

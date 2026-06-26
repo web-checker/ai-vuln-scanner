@@ -28,6 +28,8 @@ from . import config
 # 인덱스 CSV 컬럼
 ASSET_COLUMNS = ["asset_id", "진단대상명", "진단대상IP", "분류", "최초등록일", "최근진단일"]
 RUN_INDEX_COLUMNS = ["run_id", "asset_id", "종류", "일시", "원본파일명", "총항목", "취약", "양호", "NA"]
+REPORT_INDEX_COLUMNS = ["report_id", "유형", "asset_id", "진단대상명", "진단대상IP",
+                        "종류", "일시", "원본파일명", "파일명"]
 
 
 # ── 공통 유틸 ──────────────────────────────────────────────────
@@ -208,6 +210,17 @@ def save_run(asset_id: str, run_id: str, kind: str, filename: str, run_df: pd.Da
     return meta
 
 
+def set_run_kind(run_id: str, kind: str) -> bool:
+    """진단실행(Run)의 종류(최초진단/이행점검)를 변경. 비교 탭에서 사용. 성공 여부 반환."""
+    idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
+    mask = idx["run_id"] == run_id
+    if not mask.any():
+        return False
+    idx.loc[mask, "종류"] = kind
+    _write_csv(config.RUNS_INDEX_CSV, idx)
+    return True
+
+
 def list_runs(asset_id: str) -> list[dict]:
     """자산의 Run 목록(일시 오름차순 = 시간순)."""
     idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
@@ -228,6 +241,11 @@ def _run_meta(run_id: str) -> dict | None:
     return m.iloc[0].to_dict() if len(m) else None
 
 
+def run_meta(run_id: str) -> dict | None:
+    """Run 메타(run_id, asset_id, 종류, 일시, 원본파일명 …) 1건. 없으면 None."""
+    return _run_meta(run_id)
+
+
 def load_run_df(run_id: str) -> pd.DataFrame | None:
     """Run 항목결과 CSV를 RUN_COLUMNS DataFrame으로 로드. 없으면 None."""
     meta = _run_meta(run_id)
@@ -237,6 +255,74 @@ def load_run_df(run_id: str) -> pd.DataFrame | None:
     if not path.exists():
         return None
     return pd.read_csv(path, dtype=str, encoding="utf-8-sig", keep_default_na=False)
+
+
+# ── 최종 보고서 HTML 영속 ─────────────────────────────────────
+def _register_report(report_id: str, rel: str, *, report_type: str,
+                     asset_id: str, name: str, ip: str, kind: str, filename: str) -> dict:
+    """reports_index 에 보고서 메타 1건 upsert(같은 report_id면 덮어쓰기). 메타 반환."""
+    meta = {
+        "report_id": report_id, "유형": report_type, "asset_id": asset_id,
+        "진단대상명": name, "진단대상IP": ip, "종류": kind,
+        "일시": _now_iso(), "원본파일명": filename or "", "파일명": rel,
+    }
+    idx = _read_index(config.REPORTS_INDEX_CSV, REPORT_INDEX_COLUMNS)
+    mask = idx["report_id"] == report_id
+    if mask.any():
+        i = idx.index[mask][0]
+        for k, v in meta.items():
+            idx.at[i, k] = v
+    else:
+        idx = pd.concat([idx, pd.DataFrame([meta])], ignore_index=True)
+    _write_csv(config.REPORTS_INDEX_CSV, idx)
+    return meta
+
+
+def save_report_html(report_id: str, html: str, *, report_type: str = "진단",
+                     asset_id: str = "", name: str = "",
+                     ip: str = "", kind: str = "", filename: str = "") -> dict:
+    """보고서 HTML을 reports/{report_id}.html 로 저장하고 reports_index를 upsert.
+
+    report_id는 진단은 run_id, 비교는 'cmp-{base}__{target}'를 쓴다(정렬·유일).
+    같은 id로 다시 저장하면 같은 파일을 덮어쓴다(최신 보고서 유지). 메타를 반환.
+    """
+    config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    rel = f"{report_id}.html"
+    (config.REPORTS_DIR / rel).write_text(html, encoding="utf-8")
+    return _register_report(report_id, rel, report_type=report_type, asset_id=asset_id,
+                            name=name, ip=ip, kind=kind, filename=filename)
+
+
+def list_reports() -> list[dict]:
+    """저장된 보고서 목록(일시 내림차순). 추후 '불러오기' UI용."""
+    idx = _read_index(config.REPORTS_INDEX_CSV, REPORT_INDEX_COLUMNS)
+    out = [{
+        "report_id": r["report_id"], "type": r["유형"] or "진단", "asset_id": r["asset_id"],
+        "name": r["진단대상명"], "ip": r["진단대상IP"], "kind": r["종류"],
+        "at": r["일시"], "filename": r["원본파일명"],
+    } for _, r in idx.iterrows()]
+    out.sort(key=lambda x: x["at"], reverse=True)
+    return out
+
+
+def report_exists(report_id: str) -> bool:
+    """해당 report_id의 저장된 보고서 HTML 파일이 있는지."""
+    return (config.REPORTS_DIR / f"{report_id}.html").exists()
+
+
+def load_report_html(report_id: str) -> str | None:
+    """저장된 보고서 HTML 본문을 반환. 없으면 None."""
+    path = config.REPORTS_DIR / f"{report_id}.html"
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def report_meta(report_id: str) -> dict | None:
+    """보고서 인덱스에서 메타 1건 조회. 없으면 None."""
+    idx = _read_index(config.REPORTS_INDEX_CSV, REPORT_INDEX_COLUMNS)
+    m = idx[idx["report_id"] == report_id]
+    return m.iloc[0].to_dict() if len(m) else None
 
 
 # ── 비교(최초 ↔ 이행) ─────────────────────────────────────────

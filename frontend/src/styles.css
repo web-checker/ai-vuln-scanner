@@ -48,6 +48,30 @@ button { font-family: var(--font); }
 .ni-ico { font-size: 14px; opacity: 0.9; }
 .nav-badge { margin-left: auto; background: rgba(255,255,255,0.18); color: #fff; font-size: 11px;
   font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+/* 자산관리 하위 트리(대상 → 진단기록) */
+.tree-caret { margin-left: auto; padding: 0 4px; font-size: 12px; opacity: 0.85; border-radius: 6px; }
+.tree-caret:hover { background: rgba(255,255,255,0.16); }
+.nav-tree { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 4px 6px;
+  padding-left: 8px; border-left: 1px solid var(--nav-line); }
+.tree-row, .tree-leaf { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  border: 0; background: transparent; color: var(--nav-text); cursor: pointer;
+  padding: 6px 8px; border-radius: 8px; font-size: 12.5px; font-weight: 700; }
+.tree-row:hover, .tree-leaf:hover { background: var(--nav-soft); }
+.tree-row.sel, .tree-leaf.sel { background: linear-gradient(90deg, var(--brand), var(--brand2)); color: #fff; }
+.tree-twist { font-size: 11px; opacity: 0.85; width: 16px; height: 16px; line-height: 16px;
+  text-align: center; border-radius: 5px; cursor: pointer; flex-shrink: 0; }
+.tree-twist:hover { background: rgba(255,255,255,0.2); opacity: 1; }
+.tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-badge { background: rgba(255,255,255,0.16); color: var(--nav-text);
+  font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
+.tree-row.sel .tree-badge { background: rgba(255,255,255,0.28); color: #fff; }
+.tree-del { display: inline-flex; align-items: center; opacity: 0; color: var(--nav-mute); padding: 1px; border-radius: 5px; }
+.tree-row:hover .tree-del, .tree-leaf:hover .tree-del { opacity: 0.7; }
+.tree-del:hover { color: #fca5a5; opacity: 1; }
+.tree-row.sel .tree-del, .tree-leaf.sel .tree-del { color: rgba(255,255,255,0.85); }
+.tree-leaf { padding-left: 22px; font-weight: 600; color: var(--nav-mute); }
+.tree-leaf.sel { color: #fff; }
+.tree-empty { color: var(--nav-mute); font-size: 11.5px; font-weight: 600; padding: 5px 8px; }
 /* 테이블 안 카운트 배지(자산관리 진단 횟수) — 흰 배경에서도 보이게 */
 .count-badge { display: inline-block; min-width: 24px; padding: 2px 9px; border-radius: 999px;
   background: #e7eefc; color: var(--brand); font-size: 12.5px; font-weight: 800; }
@@ -78,6 +102,8 @@ button { font-family: var(--font); }
   box-shadow: 0 10px 20px -10px rgba(5,150,105,0.7); }
 .btn.ghost { background: transparent; color: var(--nav-text); border-color: rgba(255,255,255,0.2); }
 .btn.ghost:hover { background: var(--nav-soft); }
+.btn.stop { border: 0; color: #fff; background: linear-gradient(135deg, #ef4444, #b91c1c);
+  box-shadow: 0 10px 20px -10px rgba(185,28,28,0.7); margin-top: 8px; }
 .sidebar .btn.primary { margin-top: 14px; }
 .btn-row { display: flex; gap: 8px; margin-top: 8px; }
 .btn-row .btn { margin: 0; }
@@ -183,6 +209,8 @@ button { font-family: var(--font); }
 .pill.pass { color: var(--good); background: var(--good-bg); }
 .pill.vuln { color: var(--bad); background: var(--bad-bg); }
 .pill.na { color: var(--na); background: var(--na-bg); }
+.pill.info { color: #2563eb; background: #e2ebfc; }
+:root[data-theme="dark"] .pill.info { color: #93b4fb; background: #1b2740; }
 .pill.none { color: #94a3b8; background: #f1f5f9; }
 .pill.match { color: var(--good); background: var(--good-bg); }
 .pill.mis { color: var(--bad); background: var(--bad-bg); }
@@ -263,7 +291,38 @@ table.report td.c, table.report th.c { text-align: center; }
 table.report .code { color: var(--brand); font-weight: 900; font-family: ui-monospace, monospace; }
 table.report .nm { font-weight: 800; }
 table.report .reason { min-width: 420px; white-space: normal; word-break: break-word; color: var(--slate); line-height: 1.7; }
-.report-actions { display: flex; gap: 12px; padding: 16px 22px; border-top: 1px solid var(--line); }
+.detail-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; }
+.report-actions { display: flex; gap: 12px; padding: 16px 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+/* 자산관리: 좌측 트리 + 우측 상세 */
+.asset-layout { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.asset-tree { flex: 0 0 300px; max-width: 320px; }
+.asset-detail { flex: 1; min-width: 320px; }
+.atree { display: flex; flex-direction: column; gap: 2px; padding: 2px 8px 10px; }
+.atree-empty { color: var(--mute); font-size: 12.5px; padding: 8px 10px; }
+.atree-row, .atree-leaf { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 0; background: transparent; color: var(--ink); cursor: pointer; padding: 8px 10px;
+  border-radius: 10px; font-size: 13px; }
+.atree-row:hover, .atree-leaf:hover { background: var(--surface); }
+.atree-row.sel, .atree-leaf.sel { background: #e7eefc; }
+:root[data-theme="dark"] .atree-row.sel, :root[data-theme="dark"] .atree-leaf.sel { background: #1b2740; }
+.atree-twist { width: 12px; font-size: 10px; color: var(--mute); }
+.atree-ic { font-size: 14px; }
+.atree-name { flex: 1; min-width: 0; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.atree-name small { font-weight: 600; color: var(--mute); margin-left: 6px; }
+.atree-badge { background: var(--surface); color: var(--slate); font-size: 11px; font-weight: 800; padding: 1px 8px; border-radius: 999px; }
+.atree-leaf { padding-left: 26px; }
+.atree-leaf-meta { flex: 1; color: var(--slate); font-weight: 600; font-size: 12.5px; }
+.atree-leaf-vuln { color: var(--bad); font-weight: 800; font-size: 12px; }
+.atree-del { display: inline-flex; align-items: center; opacity: 0; color: var(--mute); padding: 2px; border-radius: 6px; }
+.atree-row:hover .atree-del, .atree-leaf:hover .atree-del { opacity: 0.65; }
+.atree-del:hover { color: var(--bad); opacity: 1; }
+.detail-hint { padding: 26px 22px; color: var(--mute); text-align: center; }
+/* 비교 탭: 진단기록 종류 지정 */
+.kind-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
+.kind-row:first-of-type { border-top: 0; }
+.kind-meta { flex: 1; min-width: 0; color: var(--slate); font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kind-toggle { display: flex; gap: 6px; }
 .report-actions a { text-decoration: none; }
 
 /* ════════════════ 다크 모드 (본문만; 사이드바는 네이비 고정) ════════════════ */
@@ -326,6 +385,21 @@ table.report .reason { min-width: 420px; white-space: normal; word-break: break-
 .modal-actions { display: flex; gap: 10px; }
 .modal-actions .btn { flex: 1; }
 .modal-note { margin-top: 12px; font-size: 11.5px; color: var(--mute); line-height: 1.5; }
+/* 저장된 보고서 목록 모달(넓은 변형) */
+.modal.wide { width: min(720px, 94vw); text-align: left; padding: 22px 22px 18px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-head h3 { margin: 0; font-size: 18px; font-weight: 900; color: var(--ink); }
+.modal-x { border: 0; background: var(--surface); color: var(--slate); width: 30px; height: 30px;
+  border-radius: 9px; font-size: 16px; cursor: pointer; }
+.modal-x:hover { background: var(--line); }
+.rep-list { max-height: 60vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.rep-row { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--surface); }
+.rep-row .rep-main { flex: 1; min-width: 0; }
+.rep-row .rep-name { font-weight: 800; color: var(--ink); font-size: 14px; }
+.rep-row .rep-sub { font-size: 12px; color: var(--mute); margin-top: 2px; }
+.rep-row .rep-open { width: auto; padding: 8px 16px; }
+.rep-empty { padding: 28px; text-align: center; color: var(--mute); }
 @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
 
 .notice { background: var(--good-bg); color: var(--good); border: 1px solid #b7e4cd;

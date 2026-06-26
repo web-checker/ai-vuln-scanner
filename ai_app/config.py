@@ -28,6 +28,13 @@ DATA_DIR = Path(os.environ.get("VCHECKER_DATA_DIR", str(ROOT_DIR / "data")))
 ASSETS_CSV = DATA_DIR / "assets.csv"
 RUNS_INDEX_CSV = DATA_DIR / "runs_index.csv"
 RUNS_DIR = DATA_DIR / "runs"
+# 최종 보고서 HTML 영속 저장소(저장된 보고서 불러오기 기능에서 run_id로 조회).
+#   reports/{run_id}.html        보고서 본문(자체 완결형 HTML)
+#   reports_index.csv            보고서 메타(인덱스)
+# 다운로드 폴더는 자동 정리로 사라질 수 있어, 보고서는 이 '특정 경로'에 영속 저장한다.
+# VCHECKER_REPORTS_DIR 로 위치를 바꿀 수 있다(예: C:\취약점진단_보고서).
+REPORTS_DIR = Path(os.environ.get("VCHECKER_REPORTS_DIR", str(DATA_DIR / "reports")))
+REPORTS_INDEX_CSV = DATA_DIR / "reports_index.csv"
 
 # Run 종류(최초진단/이행점검). 업로드 시 사용자가 수동 선택한다.
 RUN_FIRST = "최초진단"

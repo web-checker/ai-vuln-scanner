@@ -1,28 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, MoonIcon, Pill, VALID, matchLabel, formatCriteria } from './ui.jsx'
+import { Kpi, MoonIcon, Pill, matchLabel, formatCriteria, prefResult, isVuln, labelReason } from './ui.jsx'
 import { Chart, Donut, VulnCompare } from './charts.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
 import AssetManager from './AssetManager.jsx'
 import CompareTab from './CompareTab.jsx'
-import SaveAssetModal from './SaveAssetModal.jsx'
-
-const prefResult = (it) =>
-  it.finalResult || (VALID.includes(it.script) ? it.script : '') ||
-  (VALID.includes(it.ai) ? it.ai : '') || 'N/A'
-
-// 스크립트/AI 중 하나라도 취약이면 조치방법 표기(양호·N/A 단독이면 공란)
-const isVuln = (it) => it.script === '취약' || it.ai === '취약'
-
-// 판단근거 머리에 결과 라벨(양호 / 취약)을 한 줄로 붙이고, 근거 줄은 2칸 들여써 정렬
-const labelReason = (result, reason) => {
-  const body = String(reason || '').trim()
-  const head = `${result || 'N/A'}`
-  if (!body) return head
-  const indented = body.split('\n').map((ln) => (ln.trim() ? '  ' + ln : ln)).join('\n')
-  return `${head}\n${indented}`
-}
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function App() {
@@ -34,10 +17,10 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
   const [judging, setJudging] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [edits, setEdits] = useState({})
   const [savedCode, setSavedCode] = useState(null)
-  const [saveAsk, setSaveAsk] = useState(null)     // 업로드 직후 확인 모달 정보(null=닫힘)
   const [assetSaved, setAssetSaved] = useState(false)  // 현재 세션이 자산목록에 추가됐는지
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
@@ -47,6 +30,16 @@ export default function App() {
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
   const [sortKey, setSortKey] = useState('code')     // 'code' | 'severity'
   const [sortDir, setSortDir] = useState('asc')      // 'asc' | 'desc'
+  const [assetTarget, setAssetTarget] = useState(null)  // 사이드바 트리 → 자산관리 네비게이션 지시
+  const [assetsVersion, setAssetsVersion] = useState(0) // 자산/기록 변경 시 사이드바·가운데 동기 갱신 신호
+  const bumpAssets = () => setAssetsVersion((v) => v + 1)
+
+  // 사이드바 자산 트리에서 대상/진단기록 클릭 시 자산관리 탭에 해당 항목 표시
+  // (asset=null이면 가운데를 비움 — 삭제 후 등. nonce로 동일 대상 재클릭도 반영)
+  const navAsset = (asset = null, run = null) => {
+    setTab('assets')
+    setAssetTarget((t) => ({ asset, run, nonce: (t?.nonce || 0) + 1 }))
+  }
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -64,14 +57,23 @@ export default function App() {
   async function onUpload(file) {
     setError('')
     try {
-      const res = await api.uploadCsv(file, runKind)
+      const res = await api.uploadCsv(file)   // 종류는 비교 탭에서 지정(기본 최초진단)
       setSession({ id: res.session_id, filename: res.filename })
       setItems(res.items); setSummary(res.summary)
       setSelected(res.items[0]?.code ?? null)
       setEdits({}); setTab('summary'); setSavedCode(null)
       setAssetSaved(false); setNotice('')
-      // 업로드 직후엔 자동 저장하지 않고, 자산목록 추가 여부를 사람이 선택
-      setSaveAsk({ name: res.asset_name, ip: res.asset_ip, kind: res.run_kind, exists: res.asset_exists })
+      // 업로드 직후 자동 저장하지 않음. 자산 추가는 최종 보고서 탭의 버튼으로 진행
+    } catch (e) { setError(String(e.message || e)) }
+  }
+
+  async function onSaveAsset() {
+    if (!session) return
+    try {
+      await api.saveAsset(session.id)
+      setAssetSaved(true); bumpAssets()
+      setNotice('자산 관리에 추가되었습니다.')
+      setTimeout(() => setNotice(''), 3000)
     } catch (e) { setError(String(e.message || e)) }
   }
 
@@ -103,7 +105,14 @@ export default function App() {
       const st = await api.getState(session.id)
       setItems(st.items); setSummary(st.summary)
     } catch (e) { setError(String(e.message || e)) }
-    finally { setJudging(false) }
+    finally { setJudging(false); setCancelling(false) }
+  }
+
+  async function onCancelJudge() {
+    if (!session || !judging) return
+    setCancelling(true)
+    try { await api.cancelJudge(session.id) }
+    catch (e) { setCancelling(false); setError(String(e.message || e)) }
   }
 
   async function onReset() {
@@ -111,7 +120,7 @@ export default function App() {
     setSession(null); setItems([]); setSelected(null); setEdits({})
     setSummary({ script: { pass: 0, vuln: 0, na: 0 }, ai: { pass: 0, vuln: 0, na: 0 } })
     setProgress({ done: 0, total: 0 }); setTab('summary'); setError('')
-    setSaveAsk(null); setAssetSaved(false); setNotice('')
+    setAssetSaved(false); setNotice('')
   }
 
   const getEdit = (it) => edits[it.code] || { result: prefResult(it), reason: it.finalReason || it.reason || '' }
@@ -158,8 +167,10 @@ export default function App() {
       <Sidebar open={sideOpen} tab={tab} setTab={setTab} health={health} session={session}
         total={items.length} doneCount={doneCount}
         onUpload={onUpload} onJudge={onJudge} onReset={onReset} judging={judging}
-        runKind={runKind} setRunKind={setRunKind}
-        assetSaved={assetSaved} onSaveAsset={onSaveAsset} />
+        onCancelJudge={onCancelJudge} cancelling={cancelling}
+        assetSaved={assetSaved} onSaveAsset={onSaveAsset}
+        onNavigateAsset={navAsset} assetTarget={assetTarget}
+        assetsVersion={assetsVersion} onAssetsChanged={bumpAssets} />
 
       <main className="main">
         <div className="topbar">
@@ -171,7 +182,8 @@ export default function App() {
         {error && <div className="err">{error}</div>}
 
         {tab === 'assets' ? (
-          <AssetManager />
+          <AssetManager dark={dark} target={assetTarget} onNavigateAsset={navAsset}
+            assetsVersion={assetsVersion} onAssetsChanged={bumpAssets} />
         ) : tab === 'compare' ? (
           <CompareTab />
         ) : !session ? (
@@ -322,6 +334,10 @@ export default function App() {
               <a href={api.reportXlsxUrl(session.id)}>
                 <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 엑셀 다운로드 (.xlsx)</button>
               </a>
+              <button className="btn primary" style={{ width: 'auto', padding: '13px 22px' }}
+                onClick={onSaveAsset} disabled={assetSaved}>
+                {assetSaved ? '✓ 자산 관리에 추가됨' : '🖥 자산 관리에 추가'}
+              </button>
             </div>
           </section>
         )}

@@ -12,6 +12,28 @@ export default function CompareTab() {
   const [cmp, setCmp] = useState(null)
   const [filter, setFilter] = useState('전체')
   const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function changeKind(r, kind) {
+    if (r.kind === kind) return
+    try {
+      await api.setRunKind(r.run_id, kind)
+      setRuns((rs) => rs.map((x) => x.run_id === r.run_id ? { ...x, kind } : x))
+    } catch (e) { setErr(String(e.message || e)) }
+  }
+
+  async function onSaveReport() {
+    if (saving || !base || !target) return
+    setSaving(true); setErr('')
+    try {
+      const res = await api.saveCompareReport(base, target)
+      setNotice(`비교 보고서가 저장되었습니다 → ${res.path}`)
+      setTimeout(() => setNotice(''), 8000)
+      window.open(api.savedReportUrl(res.report_id), '_blank', 'noopener')
+    } catch (e) { setErr(String(e.message || e)) }
+    finally { setSaving(false) }
+  }
 
   const selectAsset = async (aid) => {
     setAssetId(aid); setCmp(null); setErr('')
@@ -43,13 +65,26 @@ export default function CompareTab() {
 
   const baseRun = runs.find((r) => r.run_id === base)
   const targetRun = runs.find((r) => r.run_id === target)
+
+  // 기준/비교 파일 옵션: 최초진단 그룹(위) → 이행점검 그룹(아래), 각 그룹은 시간순
+  const byAtAsc = (a, b) => String(a.at || '').localeCompare(String(b.at || ''))
+  const runOptions = () => {
+    const first = runs.filter((r) => r.kind === '최초진단').sort(byAtAsc)
+    const follow = runs.filter((r) => r.kind === '이행점검').sort(byAtAsc)
+    const grp = (label, list) => list.length > 0 && (
+      <optgroup label={label}>
+        {list.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
+      </optgroup>
+    )
+    return <>{grp('최초진단', first)}{grp('이행점검', follow)}</>
+  }
   const s = cmp?.summary || {}
   const rows = (cmp?.rows || []).filter((r) => filter === '전체' || r.상태 === filter)
 
   const TargetCard = ({ label, run }) => (
     <div className="cmp-target">
       <div className="ct-label">{label}</div>
-      <span className={`pill ${run?.kind === '최초진단' ? 'na' : 'warn'} sm`}>{run?.kind || '—'}</span>
+      <span className={`pill ${run?.kind === '최초진단' ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
       <div className="ct-meta">{fmtDateTime(run?.at)}</div>
       <div className="ct-file">{run?.filename || '—'}</div>
       <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
@@ -65,6 +100,7 @@ export default function CompareTab() {
             <p className="card-sub">2개의 비교 파일 선택</p></div>
         </div>
         {err && <div className="err">{err}</div>}
+        {notice && <div className="notice">{notice}</div>}
         <div className="cmp-pick" style={{ padding: '4px 22px 18px' }}>
           <div className="cmp-pick-field">
             <label>진단 대상</label>
@@ -76,20 +112,36 @@ export default function CompareTab() {
           <div className="cmp-pick-field">
             <label>기준 파일</label>
             <select value={base} onChange={(e) => setBase(e.target.value)}>
-              {runs.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
+              {runOptions()}
             </select>
           </div>
           <div className="cmp-vs">→</div>
           <div className="cmp-pick-field">
             <label>비교 파일</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {runs.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
+              {runOptions()}
             </select>
           </div>
           <button className="btn primary" style={{ width: 'auto', padding: '11px 22px' }}
             disabled={runs.length < 2} onClick={runCompare}>⇄ 비교</button>
         </div>
         {assetId && runs.length < 2 && <div className="hint" style={{ padding: '0 22px 16px' }}>※ 비교하려면 이 진단 대상에 진단 실행이 2개 이상 필요합니다.</div>}
+        {runs.length > 0 && (
+          <div className="kind-editor" style={{ padding: '0 22px 18px' }}>
+            <div className="hint" style={{ marginBottom: 8 }}>진단 종류 지정 — 보통 최초진단 ↔ 이행점검으로 비교합니다.</div>
+            {runs.map((r) => (
+              <div className="kind-row" key={r.run_id}>
+                <span className="kind-meta">{fmtDateTime(r.at)} · {r.filename}</span>
+                <div className="kind-toggle">
+                  {['최초진단', '이행점검'].map((k) => (
+                    <button key={k} className={`sort-btn${r.kind === k ? ' on' : ''}`}
+                      onClick={() => changeKind(r, k)}>{k}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {cmp && (
@@ -131,6 +183,10 @@ export default function CompareTab() {
             <a href={api.compareCsvUrl(base, target)}>
               <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 비교 결과 CSV (.csv)</button>
             </a>
+            <button className="btn primary" style={{ width: 'auto', padding: '13px 22px' }}
+              onClick={onSaveReport} disabled={saving}>
+              {saving ? '저장 중…' : '🗎 비교 보고서 저장 (HTML)'}
+            </button>
           </div>
         </section>
       )}
