@@ -22,7 +22,7 @@ except (AttributeError, ValueError):
 
 def main() -> None:
     args = [a for a in sys.argv[1:]]
-    code = next((a for a in args if a.upper().startswith(("WEB", "U-", "DB", "W-"))), None)
+    code = next((a for a in args if a.upper().startswith(("WEB", "U-", "D-", "W-"))), None)
     csv = next((a for a in args if a.lower().endswith(".csv")), None)
     if csv is None:
         candidates = sorted(glob.glob("was_diag_raw_*.csv"))

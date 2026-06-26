@@ -57,37 +57,6 @@ def to_ai_items(df: pd.DataFrame) -> list[dict]:
         item = {col: row.get(col, "") for col in config.AI_INPUT_COLUMNS}
         item["점검내용"] = restore_multiline(item.get("점검내용", ""))
         item["_스크립트결과"] = row.get("결과", "")      # 교차검증용
-        item["_분류"] = row.get("분류", "")
         item["_skip"] = row.get("결과", "").strip() == config.R_NA  # smoke_test 기본항목 선택용(판정엔 미사용)
         items.append(item)
     return items
-
-
-def to_dashboard_df(df: pd.DataFrame, ai_results: dict[str, dict] | None = None) -> pd.DataFrame:
-    """대시보드 표 생성. ai_results: {항목코드: {result, reason, ...}}"""
-    ai_results = ai_results or {}
-    rows = []
-    # df 가 아직 없거나(미업로드) DataFrame 이 아니면 빈 표 반환 — iterrows 호출 전 방어.
-    if df is None or not hasattr(df, "iterrows"):
-        return pd.DataFrame(rows, columns=config.DASHBOARD_COLUMNS)
-    for _, row in df.iterrows():
-        code = row.get("항목코드", "")
-        ai = ai_results.get(code, {})
-        ai_result = ai.get("result", "")
-        script_result = row.get("결과", "")
-        if ai_result:
-            match = "일치" if ai_result == script_result else "불일치"
-        else:
-            match = "미판정"
-        rows.append({
-            "항목코드": code,
-            "분류": row.get("분류", ""),
-            "항목": row.get("항목", ""),
-            "중요도": row.get("중요도", ""),
-            "스크립트결과": script_result,
-            "AI결과": ai_result,
-            "일치여부": match,
-            "진단대상": row.get("진단대상", ""),
-            "진단대상IP": row.get("진단대상IP", ""),
-        })
-    return pd.DataFrame(rows, columns=config.DASHBOARD_COLUMNS)

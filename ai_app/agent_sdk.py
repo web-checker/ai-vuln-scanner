@@ -62,6 +62,20 @@ _P3 = """\
 WebSearch 로 필요한 최신 정보만 확인해 최종 판정하라. reason 은 불릿 형식이며 확인 출처를 포함.
 JSON만 출력: {"result":"양호|취약|N/A", "reason":"근거"}"""
 
+# 조치방법: '취약'으로 확정된 항목에만 — 주통기 가이드의 '조치방법'과 '점검 및 조치 사례'를
+# 이 진단대상의 실제 상황(점검내용)에 맞게 적용해 작성한다.
+_PRM = """\
+위 점검 항목은 '취약'으로 판정되었다. [가이드 발췌] 안의 '조치방법'과 '점검 및 조치 사례'를
+근거로, 이 진단대상에 실제로 적용할 '구체적 조치방법'을 한국어 불릿 여러 줄(각 줄 '- ')로 작성하라.
+
+[중요] 가이드의 문장/페이지를 그대로 옮겨 적지 마라. 이 대상에 필요한 단계만 골라 재작성한다.
+- 점검내용에 드러난 '이 대상의 실제 취약 원인'을 먼저 한 줄로 짚고, 그것을 없애는 조치만 적는다.
+- 이 대상의 OS/서비스에 해당하지 않는 다른 플랫폼 사례(예: 대상이 Linux면 Solaris 예시)는 넣지 않는다.
+- 바꿀 설정 파일·항목·권장값을 구체적으로(예: /etc/ssh/sshd_config 의 PermitRootLogin 을 no 로), 적용 명령/재시작까지.
+- 군더더기 설명 없이 실무자가 바로 따라 할 수 있게 3~6개 불릿으로 간결하게.
+- 불릿과 불릿 사이에는 빈 줄 하나를 넣는다(각 불릿은 "\\n\\n" 로 구분).
+JSON만 출력: {"remediation":"- 첫 번째 조치\\n\\n- 두 번째 조치"}"""
+
 
 def _item_text(item: dict) -> str:
     return "\n".join([
@@ -76,7 +90,7 @@ def _item_text(item: dict) -> str:
 
 def judge_item(item: dict) -> dict:
     """3단계 판정(동기). 반환: {result, reason, source, guide, usage, ...}"""
-    return aio.run(_judge_async, item)
+    return aio.run(_judge_async, item, timeout=config.JUDGE_TIMEOUT_SEC)
 
 
 async def _judge_async(item: dict) -> dict:
@@ -88,7 +102,7 @@ async def _judge_async(item: dict) -> dict:
     d1, c1 = await _ask(base + "\n\n" + _P1)
     cost += c1
     if _has_result(d1) and not d1.get("need_more"):
-        return _final(d1, "즉시판단(로우데이터)", "", cost)
+        return await _finalize(item, base, d1, "즉시판단(로우데이터)", "", None, cost)
 
     # ── 2단계: 가이드 텍스트 ────────────────────────────────
     guide_note = ""
@@ -107,14 +121,29 @@ async def _judge_async(item: dict) -> dict:
         cost += c2
         carry = d2
         if _has_result(d2) and not d2.get("need_web"):
-            return _final(d2, "가이드확인", guide_note, cost)
+            return await _finalize(item, base, d2, "가이드확인", guide_note, gtext, cost)
 
     # ── 3단계: 웹검색 ───────────────────────────────────────
     prompt3 = base + (f"\n\n[가이드 발췌]\n{gtext}" if gtext else "") + "\n\n" + _P3
     d3, c3 = await _ask(prompt3, web=True)
     cost += c3
     final = d3 if _has_result(d3) else carry
-    return _final(final, "웹검색", guide_note, cost)
+    return await _finalize(item, base, final, "웹검색", guide_note, gtext, cost)
+
+
+async def _remediate(base: str, gtext: str | None, code: str) -> tuple[str, float]:
+    """'취약' 항목의 조치방법 생성. 가이드 텍스트가 없으면 항목코드로 한 번 더 로드."""
+    guide = gtext
+    if guide is None:
+        gp = config.guide_pdf_for_code(code)
+        if gp is not None:
+            guide = guide_index.section_text(str(gp), code)
+    prompt = base + (f"\n\n[가이드 발췌]\n{guide}" if guide else "") + "\n\n" + _PRM
+    try:
+        d, c = await _ask(prompt)
+    except Exception:  # noqa: BLE001  (조치문 생성 실패는 판정 결과를 막지 않는다)
+        return "", 0.0
+    return d.get("remediation", ""), c
 
 
 async def _ask(prompt: str, *, web: bool = False, _attempts: int = 2) -> tuple[dict, float]:
@@ -176,14 +205,23 @@ def _has_result(d: dict) -> bool:
     return d.get("result", "") in config.VALID_RESULTS
 
 
-def _final(d: dict, source: str, guide: str, cost: float) -> dict:
+async def _finalize(item: dict, base: str, d: dict, source: str,
+                    guide: str, gtext: str | None, cost: float) -> dict:
     result = d.get("result", "")
     if result not in config.VALID_RESULTS:
         # 결과 파싱 실패/불확실 → 보수적으로 '취약'(N/A로 묻지 않는다). N/A는 대상외 항목만(사전 자동채택).
         result = config.R_VULN
+    # '취약' 항목에만 가이드 기반 조치방법 생성(양호/N/A는 공란)
+    # [비활성화] 조치방법 AI 생성 — 현재는 CSV 하드코딩 값을 사용한다(server._prefill_remed).
+    #   재활성화하려면 아래 3줄 주석을 해제. (_remediate / _PRM 코드는 보존)
+    remediation = ""
+    # if result == config.R_VULN:
+    #     remediation, rc = await _remediate(base, gtext, item.get("항목코드", ""))
+    #     cost += rc
     return {
         "result": result,
         "reason": d.get("reason", "(판단 근거 없음)"),
+        "remediation": remediation,
         "source": source,          # 어느 단계에서 판정했는지(표시용)
         "guide": guide,
         "usage": {"cost_usd": cost},
