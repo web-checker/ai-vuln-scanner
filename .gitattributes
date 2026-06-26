@@ -1,0 +1,11 @@
+# 기본: git 자동 정규화(저장은 LF, 체크아웃은 플랫폼 기본).
+# ※ 일반 규칙을 먼저 두고, 아래에서 구체 규칙(.bat 등)으로 덮어쓴다.
+* text=auto
+
+# Windows 배치 파일은 반드시 CRLF 줄바꿈이어야 한다.
+# LF-only면 cmd.exe가 `if errorlevel 1 (...)` 같은 괄호 블록을 오파싱해
+# run-app.bat / run-dev.bat 가 pushd/빌드 단계에서 깨진다(과거 실행 실패 원인).
+# '-text'(EOL 변환 안 함)로 두어 repo 에 CRLF 바이트를 그대로 저장 →
+# 모든 팀원이 일반 'git pull' 만으로 CRLF 본을 받게 한다.
+*.bat -text
+*.cmd -text

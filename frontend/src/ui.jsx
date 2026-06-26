@@ -3,6 +3,11 @@ import React from 'react'
 
 export const VALID = ['양호', '취약', 'N/A']
 
+// 진단 종류(최초진단/이행점검) — 비교·자산 화면이 공유하는 라벨/필터 키
+export const RUN_FIRST = '최초진단'
+export const RUN_FOLLOWUP = '이행점검'
+export const RUN_KINDS = [RUN_FIRST, RUN_FOLLOWUP]
+
 // 최종 결과 선택: 확정값 우선 → 스크립트 → AI → N/A (보고서/상세 공통)
 export const prefResult = (it) =>
   it.finalResult || (VALID.includes(it.script) ? it.script : '') ||
@@ -13,10 +18,6 @@ export const isVuln = (it) => it.script === '취약' || it.ai === '취약'
 
 // 판단근거 본문만 반환(결과 라벨은 '결과' 열에 이미 표기되므로 머리말 생략)
 export const labelReason = (result, reason) => String(reason || '').trim()
-
-// AI 결과 vs 자동화 스크립트 결과 일치 라벨 (AI 미판정이면 '미판정')
-export const matchLabel = (ai, script) =>
-  !ai ? '미판정' : ai === script ? '일치' : '불일치'
 
 // 판단기준의 ' | ' 구분(양호 내용 | 취약 내용)을 줄바꿈으로 변환
 export const formatCriteria = (text) =>

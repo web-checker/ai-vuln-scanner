@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, MoonIcon, Pill, matchLabel, formatCriteria, prefResult, isVuln, labelReason } from './ui.jsx'
-import { Chart, Donut, VulnCompare } from './charts.jsx'
+import { MoonIcon, Pill, prefResult } from './ui.jsx'
+import { useReportSort, ReportSortButtons, ReportTable, SummaryCharts } from './dashboard.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
 import AssetManager from './AssetManager.jsx'
@@ -26,10 +26,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
   const [sideOpen, setSideOpen] = useState(true)
-  const [runKind, setRunKind] = useState('최초진단')  // 업로드 시 진단 종류(수동 선택)
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
-  const [sortKey, setSortKey] = useState('code')     // 'code' | 'severity'
-  const [sortDir, setSortDir] = useState('asc')      // 'asc' | 'desc'
   const [assetTarget, setAssetTarget] = useState(null)  // 사이드바 트리 → 자산관리 네비게이션 지시
   const [assetsVersion, setAssetsVersion] = useState(0) // 자산/기록 변경 시 사이드바·가운데 동기 갱신 신호
   const bumpAssets = () => setAssetsVersion((v) => v + 1)
@@ -41,10 +38,7 @@ export default function App() {
     setAssetTarget((t) => ({ asset, run, nonce: (t?.nonce || 0) + 1 }))
   }
 
-  const toggleSort = (key) => {
-    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    else { setSortKey(key); setSortDir('asc') }
-  }
+  const { sortKey, toggleSort, sortArrow, reportRows } = useReportSort(items)
 
   useEffect(() => { api.getHealth().then(setHealth).catch(() => setHealth({ ready: false, message: '백엔드 연결 실패', backend: '-' })) }, [])
   useEffect(() => {
@@ -77,16 +71,6 @@ export default function App() {
     } catch (e) { setError(String(e.message || e)) }
   }
 
-  async function onSaveAsset() {
-    if (!session) return
-    try {
-      await api.saveAsset(session.id)
-      setAssetSaved(true); setSaveAsk(null)
-      setNotice('자산 관리에 추가되었습니다.')
-      setTimeout(() => setNotice(''), 3000)
-    } catch (e) { setSaveAsk(null); setError(String(e.message || e)) }
-  }
-
   async function onJudge(mode) {
     if (!session) return
     setError(''); setJudging(true); setProgress({ done: 0, total: 0 })
@@ -97,8 +81,7 @@ export default function App() {
           setProgress({ done: ev.done, total: ev.total })
           setItems((prev) => prev.map((it) => it.code === ev.code
             ? { ...it, ai: ev.result, reason: ev.reason, remediation: ev.remediation,
-                source: ev.source, confidence: ev.confidence,
-                match: matchLabel(ev.result, it.script) }
+                source: ev.source, confidence: ev.confidence }
             : it))
         }
       }
@@ -147,17 +130,6 @@ export default function App() {
   const judged = items.filter((it) => it.ai)
   const matched = judged.filter((it) => it.ai === it.script).length
   const matchRate = judged.length ? Math.round((matched / judged.length) * 100) : null
-  const donutCounts = donutMode === 'ai' ? summary.ai : summary.script
-
-  // 보고서 정렬 (항목코드 / 중요도)
-  const SEV_RANK = { 상: 3, 중: 2, 하: 1 }
-  const reportRows = [...items].sort((a, b) => {
-    let r
-    if (sortKey === 'severity') r = (SEV_RANK[a.severity] || 0) - (SEV_RANK[b.severity] || 0)
-    else r = String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
-    return sortDir === 'asc' ? r : -r
-  })
-  const sortArrow = (k) => (sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : '⇅')
 
   return (
     <div className="shell">
@@ -194,59 +166,15 @@ export default function App() {
           </div>
         ) : tab === 'summary' ? (
           <>
-            {/* KPI */}
-            <div className="kpis">
-              <div className="kpi-left">
-                <Kpi title="전체 항목" value={total} sub="진단 대상" />
-                <VulnCompare summary={summary} total={total} />
-              </div>
-              <div className="kpi-right">
-                <Kpi title="확정 완료" value={`${decided}/${total}`} sub="검토 진행률" />
-                <Kpi title="AI 일치율" value={matchRate === null ? '—' : `${matchRate}%`} sub="스크립트 / AI" accent />
-              </div>
-            </div>
-
-            {/* 차트: 막대 + 도넛 */}
-            <div className="charts">
-              <section className="card">
-                <div className="card-head">
-                  <div className="card-ico">📊</div>
-                  <div style={{ flex: 1 }}>
-                    <h2 className="card-title">진단 결과 요약</h2>
-                    <p className="card-sub">자동화 스크립트 / AI 등급별 비교</p>
-                  </div>
-                  <div className="chart-legend">
-                    <span className="row"><span className="sw" style={{ background: '#FFBB00' }} /> 스크립트</span>
-                    <span className="row"><span className="sw" style={{ background: '#2563eb' }} /> AI</span>
-                  </div>
-                </div>
-                <div style={{ padding: '18px 22px 12px' }}>
-                  <Chart summary={summary} dark={dark} />
-                  {(judging || progress.total > 0) && (
-                    <>
-                      <div className="progress"><div style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} /></div>
-                      <div className="progress-txt">판정 진행 {progress.done}/{progress.total}</div>
-                    </>
-                  )}
-                </div>
-              </section>
-
-              <section className="card">
-                <div className="card-head">
-                  <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>✓</div>
-                  <div style={{ flex: 1 }}>
-                    <h2 className="card-title">결과 분포</h2>
-                    <p className="card-sub">{donutMode === 'ai' ? 'AI 판단' : '자동화 스크립트 판단'} 등급 비율</p>
-                  </div>
-                  <button className="chart-toggle" onClick={() => setDonutMode((m) => (m === 'ai' ? 'script' : 'ai'))}>
-                    ⇄ {donutMode === 'ai' ? '자동화 스크립트 결과' : 'AI 결과'}
-                  </button>
-                </div>
-                <div className="donut-body" style={{ padding: '14px 22px 18px' }}>
-                  <Donut counts={donutCounts} dark={dark} />
-                </div>
-              </section>
-            </div>
+            <SummaryCharts summary={summary} total={total} decided={decided} matchRate={matchRate}
+              donutMode={donutMode} setDonutMode={setDonutMode} dark={dark}>
+              {(judging || progress.total > 0) && (
+                <>
+                  <div className="progress"><div style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} /></div>
+                  <div className="progress-txt">판정 진행 {progress.done}/{progress.total}</div>
+                </>
+              )}
+            </SummaryCharts>
 
             {/* 진단 결과 상세: 마스터-디테일 */}
             <section className="card">
@@ -294,42 +222,9 @@ export default function App() {
               <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
               <div style={{ flex: 1 }}><h2 className="card-title">최종 보고서</h2>
                 <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과 사용</p></div>
-              <div className="sort-bar">
-                <button className={`sort-btn${sortKey === 'code' ? ' on' : ''}`} onClick={() => toggleSort('code')}>항목코드 {sortArrow('code')}</button>
-                <button className={`sort-btn${sortKey === 'severity' ? ' on' : ''}`} onClick={() => toggleSort('severity')}>중요도 {sortArrow('severity')}</button>
-              </div>
+              <ReportSortButtons sortKey={sortKey} toggleSort={toggleSort} sortArrow={sortArrow} />
             </div>
-            <div className="tbl-wrap">
-              <table className="report">
-                <thead>
-                  <tr>
-                    <th>항목코드</th><th>분류</th><th className="c">중요도</th><th>항목</th><th>판단 기준</th>
-                    <th className="c">결과</th><th>판단 근거</th><th>조치 방법</th>
-                    <th className="c">진단 대상</th><th className="c">진단 대상 IP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportRows.map((it) => {
-                    const r = prefResult(it)
-                    const reason = it.finalReason || it.reason || it.check || ''
-                    return (
-                      <tr key={it.code}>
-                        <td className="code">{it.code}</td>
-                        <td>{it.group}</td>
-                        <td className="c"><span className={`sev ${it.severity}`}>{it.severity}</span></td>
-                        <td className="nm">{it.name}</td>
-                        <td className="reason" style={{ minWidth: 240 }}>{formatCriteria(it.criteria)}</td>
-                        <td className="c"><Pill v={r} /></td>
-                        <td className="reason">{labelReason(r, reason)}</td>
-                        <td className="reason">{isVuln(it) ? (it.remediation || '') : ''}</td>
-                        <td className="c">{it.target}</td>
-                        <td className="c">{it.ip}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ReportTable rows={reportRows} />
             <div className="report-actions">
               <a href={api.reportXlsxUrl(session.id)}>
                 <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 엑셀 다운로드 (.xlsx)</button>
@@ -342,10 +237,6 @@ export default function App() {
           </section>
         )}
       </main>
-
-      {saveAsk && (
-        <SaveAssetModal info={saveAsk} onSave={onSaveAsset} onClose={() => setSaveAsk(null)} />
-      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 // 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 전이 상태 비교.
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt } from './ui.jsx'
+import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, RUN_KINDS } from './ui.jsx'
 
 export default function CompareTab() {
   const [assets, setAssets] = useState([])
@@ -69,14 +69,14 @@ export default function CompareTab() {
   // 기준/비교 파일 옵션: 최초진단 그룹(위) → 이행점검 그룹(아래), 각 그룹은 시간순
   const byAtAsc = (a, b) => String(a.at || '').localeCompare(String(b.at || ''))
   const runOptions = () => {
-    const first = runs.filter((r) => r.kind === '최초진단').sort(byAtAsc)
-    const follow = runs.filter((r) => r.kind === '이행점검').sort(byAtAsc)
+    const first = runs.filter((r) => r.kind === RUN_FIRST).sort(byAtAsc)
+    const follow = runs.filter((r) => r.kind === RUN_FOLLOWUP).sort(byAtAsc)
     const grp = (label, list) => list.length > 0 && (
       <optgroup label={label}>
         {list.map((r) => <option key={r.run_id} value={r.run_id}>{fmtRunOpt(r)}</option>)}
       </optgroup>
     )
-    return <>{grp('최초진단', first)}{grp('이행점검', follow)}</>
+    return <>{grp(RUN_FIRST, first)}{grp(RUN_FOLLOWUP, follow)}</>
   }
   const s = cmp?.summary || {}
   const rows = (cmp?.rows || []).filter((r) => filter === '전체' || r.상태 === filter)
@@ -84,7 +84,7 @@ export default function CompareTab() {
   const TargetCard = ({ label, run }) => (
     <div className="cmp-target">
       <div className="ct-label">{label}</div>
-      <span className={`pill ${run?.kind === '최초진단' ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
+      <span className={`pill ${run?.kind === RUN_FIRST ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
       <div className="ct-meta">{fmtDateTime(run?.at)}</div>
       <div className="ct-file">{run?.filename || '—'}</div>
       <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
@@ -133,7 +133,7 @@ export default function CompareTab() {
               <div className="kind-row" key={r.run_id}>
                 <span className="kind-meta">{fmtDateTime(r.at)} · {r.filename}</span>
                 <div className="kind-toggle">
-                  {['최초진단', '이행점검'].map((k) => (
+                  {RUN_KINDS.map((k) => (
                     <button key={k} className={`sort-btn${r.kind === k ? ' on' : ''}`}
                       onClick={() => changeKind(r, k)}>{k}</button>
                   ))}

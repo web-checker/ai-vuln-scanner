@@ -59,6 +59,21 @@ def _write_csv(path: Path, df: pd.DataFrame) -> None:
     df.to_csv(path, index=False, encoding="utf-8-sig")
 
 
+def _upsert(df: pd.DataFrame, key_col: str, meta: dict) -> pd.DataFrame:
+    """meta[key_col]와 같은 행을 meta로 덮어쓰고, 없으면 새 행을 추가한 df를 반환.
+
+    인덱스 CSV(자산/Run/보고서)의 공통 upsert 패턴. 보존할 값(최초등록일·일시 등)은
+    호출측이 meta에 미리 담아 넘긴다.
+    """
+    mask = df[key_col] == meta[key_col]
+    if mask.any():
+        i = df.index[mask][0]
+        for k, v in meta.items():
+            df.at[i, k] = v
+        return df
+    return pd.concat([df, pd.DataFrame([meta])], ignore_index=True)
+
+
 def asset_id_for(ip: str) -> str:
     """진단대상IP를 파일시스템 안전한 asset_id로 정규화.
 
@@ -98,18 +113,20 @@ def register_asset(name: str, ip: str, group: str) -> str:
     now = _now_iso()
     df = _read_index(config.ASSETS_CSV, ASSET_COLUMNS)
     mask = df["asset_id"] == aid
-    if mask.any():
+    if mask.any():  # 기존 자산: 대표값은 새 값 우선, 빈 값이면 보존. 최초등록일은 유지.
         i = df.index[mask][0]
-        df.at[i, "진단대상명"] = name or df.at[i, "진단대상명"]
-        df.at[i, "진단대상IP"] = ip or df.at[i, "진단대상IP"]
-        df.at[i, "분류"] = group or df.at[i, "분류"]
-        df.at[i, "최근진단일"] = now
+        meta = {
+            "asset_id": aid,
+            "진단대상명": name or df.at[i, "진단대상명"],
+            "진단대상IP": ip or df.at[i, "진단대상IP"],
+            "분류": group or df.at[i, "분류"],
+            "최초등록일": df.at[i, "최초등록일"],
+            "최근진단일": now,
+        }
     else:
-        df = pd.concat([df, pd.DataFrame([{
-            "asset_id": aid, "진단대상명": name, "진단대상IP": ip, "분류": group,
-            "최초등록일": now, "최근진단일": now,
-        }])], ignore_index=True)
-    _write_csv(config.ASSETS_CSV, df)
+        meta = {"asset_id": aid, "진단대상명": name, "진단대상IP": ip, "분류": group,
+                "최초등록일": now, "최근진단일": now}
+    _write_csv(config.ASSETS_CSV, _upsert(df, "asset_id", meta))
     return aid
 
 
@@ -198,15 +215,9 @@ def save_run(asset_id: str, run_id: str, kind: str, filename: str, run_df: pd.Da
     }
     idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
     mask = idx["run_id"] == run_id
-    if mask.any():
-        i = idx.index[mask][0]
-        # 최초 등록 일시는 보존하고 카운트/종류/파일명만 갱신
-        meta["일시"] = idx.at[i, "일시"] or meta["일시"]
-        for k, v in meta.items():
-            idx.at[i, k] = v
-    else:
-        idx = pd.concat([idx, pd.DataFrame([meta])], ignore_index=True)
-    _write_csv(config.RUNS_INDEX_CSV, idx)
+    if mask.any():  # 최초 등록 일시는 보존하고 카운트/종류/파일명만 갱신
+        meta["일시"] = idx.at[idx.index[mask][0], "일시"] or meta["일시"]
+    _write_csv(config.RUNS_INDEX_CSV, _upsert(idx, "run_id", meta))
     return meta
 
 
@@ -267,14 +278,7 @@ def _register_report(report_id: str, rel: str, *, report_type: str,
         "일시": _now_iso(), "원본파일명": filename or "", "파일명": rel,
     }
     idx = _read_index(config.REPORTS_INDEX_CSV, REPORT_INDEX_COLUMNS)
-    mask = idx["report_id"] == report_id
-    if mask.any():
-        i = idx.index[mask][0]
-        for k, v in meta.items():
-            idx.at[i, k] = v
-    else:
-        idx = pd.concat([idx, pd.DataFrame([meta])], ignore_index=True)
-    _write_csv(config.REPORTS_INDEX_CSV, idx)
+    _write_csv(config.REPORTS_INDEX_CSV, _upsert(idx, "report_id", meta))
     return meta
 
 

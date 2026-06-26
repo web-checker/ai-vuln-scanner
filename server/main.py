@@ -17,6 +17,7 @@ from __future__ import annotations
 import collections
 import io
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -40,6 +41,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# run_id(=보고서 파일명 조각)는 영문/숫자/'_'/'-'만 허용 — '/','\','..' 등을 막아
+# REPORTS_DIR 밖으로의 경로 이탈(path traversal) 쓰기를 차단한다.
+_RUN_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
+
+
+def _safe_run_id(run_id: str) -> str:
+    if not run_id or not _RUN_ID_RE.match(run_id):
+        raise HTTPException(400, f"잘못된 run_id: {run_id!r}")
+    return run_id
+
+
+def _attachment_headers(filename: str) -> dict[str, str]:
+    """다운로드용 Content-Disposition 헤더(RFC 5987 — 한글 파일명 안전 인코딩)."""
+    return {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
+
+
+def _first_target(run_df) -> tuple[str, str]:
+    """Run DataFrame 첫 행의 (진단대상명, IP). 빈 표면 ('', '')."""
+    if run_df is None or not len(run_df):
+        return "", ""
+    return run_df["진단대상"].iloc[0], run_df["진단대상IP"].iloc[0]
+
+
+def _saved_report_response(meta: dict) -> dict:
+    """보고서 저장 핸들러 공통 응답(report_id·파일명·영속 경로)."""
+    path = str((config.REPORTS_DIR / meta["파일명"]).resolve())
+    return {"ok": True, "report_id": meta["report_id"], "filename": meta["파일명"], "path": path}
+
 
 # ── 세션(메모리) 저장소 ────────────────────────────────────────
 #   {session_id: {"df": DataFrame, "items": [...], "ai_results": {}, "decisions": {}}}
@@ -266,7 +296,8 @@ def judge(req: JudgeReq):
             try:
                 res = backend.judge_item(it)
             except Exception as e:  # noqa: BLE001
-                res = {"result": "", "reason": f"(오류: {e})", "source": "", "confidence": 0.0}
+                res = {"result": "", "reason": f"(오류: {e})", "remediation": "",
+                       "source": "", "confidence": 0.0}
             ai[code] = res
             done += 1
             yield json.dumps({"event": "item", "code": code,
@@ -346,11 +377,10 @@ def report_xlsx(session_id: str):
     st = _get(session_id)
     data = report.build_xlsx_report(st["df"], _final_decisions(st))
     label = st["df"]["진단대상"].iloc[0] if len(st["df"]) else "report"
-    fname = quote(f"was_diag_report_{label}.xlsx")
     return StreamingResponse(
         io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"},
+        headers=_attachment_headers(f"was_diag_report_{label}.xlsx"),
     )
 
 
@@ -396,8 +426,7 @@ def get_saved_report(report_id: str, download: int = 0):
     if download:
         meta = store.report_meta(report_id) or {}
         label = (meta.get("진단대상명") or "report").strip() or "report"
-        fname = quote(f"진단보고서_{label}_{report_id}.html")
-        headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{fname}"
+        headers = _attachment_headers(f"진단보고서_{label}_{report_id}.html")
     return HTMLResponse(html, headers=headers)
 
 
@@ -461,16 +490,14 @@ def save_run_report(run_id: str):
     if run_df is None:
         raise HTTPException(404, "Run을 찾을 수 없습니다.")
     rmeta = store.run_meta(run_id) or {}
-    name = run_df["진단대상"].iloc[0] if len(run_df) else ""
-    ip = run_df["진단대상IP"].iloc[0] if len(run_df) else ""
+    name, ip = _first_target(run_df)
     html = report.build_html_report_from_run(
         run_df, meta={"종류": rmeta.get("종류", ""), "일시": rmeta.get("일시", ""),
                       "원본파일명": rmeta.get("원본파일명", "")})
     meta = store.save_report_html(
         run_id, html, asset_id=rmeta.get("asset_id", ""),
         name=name, ip=ip, kind=rmeta.get("종류", ""), filename=rmeta.get("원본파일명", ""))
-    path = str((config.REPORTS_DIR / meta["파일명"]).resolve())
-    return {"ok": True, "report_id": meta["report_id"], "filename": meta["파일명"], "path": path}
+    return _saved_report_response(meta)
 
 
 class RunKindReq(BaseModel):
@@ -505,6 +532,7 @@ def delete_asset(asset_id: str):
 @app.get("/api/compare")
 def compare(base: str, target: str, asset_id: str = ""):
     """두 Run(base·target)을 항목코드로 비교. base/target은 사용자가 고른 run_id."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
     try:
         return store.compare(base, target)
     except ValueError as e:
@@ -514,13 +542,12 @@ def compare(base: str, target: str, asset_id: str = ""):
 @app.post("/api/compare/report/save")
 def save_compare_report(base: str, target: str):
     """두 Run 비교 결과를 HTML 보고서로 영속 저장(report_id = 'cmp-{base}__{target}')."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
     try:
         cmp = store.compare(base, target)
     except ValueError as e:
         raise HTTPException(404, str(e))
-    bdf = store.load_run_df(base)
-    name = bdf["진단대상"].iloc[0] if (bdf is not None and len(bdf)) else ""
-    ip = bdf["진단대상IP"].iloc[0] if (bdf is not None and len(bdf)) else ""
+    name, ip = _first_target(store.load_run_df(base))
     asset_id = (cmp.get("base") or {}).get("asset_id", "")
     html = report.build_html_report_compare(cmp, meta={"대상": f"{name} ({ip})" if name or ip else ""})
     report_id = f"cmp-{base}__{target}"
@@ -528,23 +555,22 @@ def save_compare_report(base: str, target: str):
         report_id, html, report_type="비교", asset_id=asset_id,
         name=name, ip=ip, kind="비교",
         filename=f"{(cmp.get('base') or {}).get('원본파일명', '')} → {(cmp.get('target') or {}).get('원본파일명', '')}")
-    path = str((config.REPORTS_DIR / meta["파일명"]).resolve())
-    return {"ok": True, "report_id": meta["report_id"], "filename": meta["파일명"], "path": path}
+    return _saved_report_response(meta)
 
 
 @app.get("/api/compare.csv")
 def compare_csv(base: str, target: str, asset_id: str = ""):
     """비교 결과 CSV 다운로드(UTF-8 BOM — Excel 한글 호환)."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
     try:
         cdf = store.compare_df(base, target)
     except ValueError as e:
         raise HTTPException(404, str(e))
     data = report.build_compare_csv(cdf)
-    fname = quote(f"compare_{base}_vs_{target}.csv")
     return StreamingResponse(
         io.BytesIO(data),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"},
+        headers=_attachment_headers(f"compare_{base}_vs_{target}.csv"),
     )
 
 

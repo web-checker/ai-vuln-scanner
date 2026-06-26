@@ -1,7 +1,7 @@
 // 자산관리: 대상 목록 → 진단기록 → (기록 클릭) 상세. 사이드바 트리로도 바로 진입 가능.
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { fmtDateTime, fmtRunOpt, TrashIcon } from './ui.jsx'
+import { fmtDateTime, fmtRunOpt, TrashIcon, RUN_FIRST } from './ui.jsx'
 import RunDetail from './RunDetail.jsx'
 
 export default function AssetManager({ dark, target, onNavigateAsset, assetsVersion, onAssetsChanged }) {
@@ -140,7 +140,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
                   </tr>
                   {!collapsed[g.filename] && g.runs.map((r) => (
                     <tr key={r.run_id} style={{ cursor: 'pointer' }} onClick={() => openRun(r)} title="클릭하여 상세 보기">
-                      <td><span className={`pill ${r.kind === '최초진단' ? 'info' : 'warn'} sm`}>{r.kind}</span></td>
+                      <td><span className={`pill ${r.kind === RUN_FIRST ? 'info' : 'warn'} sm`}>{r.kind}</span></td>
                       <td className="code">{fmtDateTime(r.at)}</td>
                       <td className="c">{r.total}</td><td className="c">{r.vuln}</td>
                       <td className="c">{r.pass}</td><td className="c">{r.na}</td>
