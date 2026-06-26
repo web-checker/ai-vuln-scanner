@@ -155,7 +155,7 @@ export default function App() {
 
       <main className="main">
         <div className="topbar">
-          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? (reportKind === REPORT_FINAL ? '최종 보고서' : '최초 보고서') : tab === 'assets' ? '자산 관리' : '진단 결과 비교'}</div>
+          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? (reportKind === REPORT_FINAL ? '이행 점검' : '최초 진단') : tab === 'assets' ? '자산 관리' : '진단 결과 비교'}</div>
           <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : <><MoonIcon />다크</>}</button>
         </div>
 

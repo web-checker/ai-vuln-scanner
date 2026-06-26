@@ -24,17 +24,17 @@ export default function Sidebar({ open, tab, setTab, health, session, total, don
           <span className="ni-ico">▦</span> 보고서
           {session && <span className="nav-badge">{total}</span>}
           <span className="tree-caret" onClick={(e) => { e.stopPropagation(); setReportOpen((o) => !o) }}
-            title="최초/최종 보고서">{reportOpen ? '▾' : '▸'}</span>
+            title="최초 진단/이행 점검">{reportOpen ? '▾' : '▸'}</span>
         </button>
         {reportOpen && (
           <div className="nav-tree">
             <button className={`tree-row${tab === 'report' && reportKind === REPORT_FIRST ? ' sel' : ''}`}
               onClick={() => { setTab('report'); setReportKind?.(REPORT_FIRST) }}>
-              📄 <span className="tree-label">최초 보고서</span>
+              📄 <span className="tree-label">최초 진단</span>
             </button>
             <button className={`tree-row${tab === 'report' && reportKind === REPORT_FINAL ? ' sel' : ''}`}
               onClick={() => { setTab('report'); setReportKind?.(REPORT_FINAL) }}>
-              📄 <span className="tree-label">최종 보고서</span>
+              📄 <span className="tree-label">이행 점검</span>
             </button>
           </div>
         )}

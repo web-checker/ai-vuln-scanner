@@ -112,7 +112,7 @@ export default function ReportTab({ reportKind, session, sessionItems }) {
       <section className="card">
         <div className="card-head">
           <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
-          <div style={{ flex: 1 }}><h2 className="card-title">최종 보고서</h2>
+          <div style={{ flex: 1 }}><h2 className="card-title">이행 점검</h2>
             <p className="card-sub">최초 진단 파일 및 이행 점검 파일 비교</p></div>
         </div>
         {err && <div className="err">{err}</div>}
@@ -167,7 +167,7 @@ export default function ReportTab({ reportKind, session, sessionItems }) {
     <section className="card">
       <div className="card-head">
         <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
-        <div style={{ flex: 1 }}><h2 className="card-title">최초 보고서</h2>
+        <div style={{ flex: 1 }}><h2 className="card-title">최초 진단</h2>
           <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과 사용</p></div>
         <div className="rep-pick">
           <select value={firstAsset} onChange={(e) => loadFirstAsset(e.target.value)}>

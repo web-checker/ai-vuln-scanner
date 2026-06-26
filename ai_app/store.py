@@ -196,6 +196,9 @@ def build_run_df(df: pd.DataFrame, ai_results: dict[str, dict], decisions: dict[
             "중요도": row.get("중요도", ""),
             "진단대상": row.get("진단대상", ""),
             "진단대상IP": row.get("진단대상IP", ""),
+            # 진단대상 시트용 메타 — 원본 CSV의 선택 컬럼을 그대로 보존(없으면 "")
+            config.CSV_HOSTNAME_COLUMN: row.get(config.CSV_HOSTNAME_COLUMN, ""),
+            config.CSV_VERSION_COLUMN: row.get(config.CSV_VERSION_COLUMN, ""),
             "스크립트결과": row.get("결과", ""),
             "AI결과": ai.get("result", ""),
             "AI근거": ai.get("reason", "") or restore_multiline(row.get("점검내용", "")),
