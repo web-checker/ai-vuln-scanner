@@ -587,7 +587,7 @@ def run_report_xlsx(run_id: str):
     run_df = store.load_run_df(_safe_run_id(run_id))
     if run_df is None:
         raise HTTPException(404, "Run을 찾을 수 없습니다.")
-    data = report.build_xlsx_from_run(run_df)   # 진단대상 시트 메타(HOSTNAME/버전) 포함
+    data = report.build_xlsx_from_run(run_df)   # 진단대상 시트 메타(호스트명/버전) 포함
     name, _ip = _first_target(run_df)
     return StreamingResponse(io.BytesIO(data), media_type=_XLSX_MEDIA,
                              headers=_attachment_headers(f"report_{name or run_id}.xlsx"))

@@ -123,7 +123,7 @@ CSV_REMEDIATION_COLUMN = "조치방법"
 #  보고서 '1. 진단 대상' 시트의 Hostname/버전정보 칸을 채운다(없으면 공란/'-').
 #  ※ CSV 경량화: 전체 행에 반복하지 말고 '첫 행에만' 채워도 된다
 #    — 보고서는 '첫 비어있지 않은 값'을 읽으므로 중복 0으로 동일 동작.
-CSV_HOSTNAME_COLUMN = "HOSTNAME"
+CSV_HOSTNAME_COLUMN = "호스트명"   # 진단 스크립트 CSV 컬럼명(다른 한글 컬럼과 일관)
 CSV_VERSION_COLUMN = "버전정보"
 
 # AI(LLM)에게 추론 재료로 넘길 컬럼 (토큰 절감 위해 6개로 축소)
