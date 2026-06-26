@@ -66,6 +66,33 @@ export function Kpi({ title, value, sub, accent, tone, box }) {
   )
 }
 
+// 번호식 페이지네이션 (밑에 1 2 3 …). 10개 초과 시 표시. 페이지 수가 많으면 현재 위치 주변만 노출.
+export function Pager({ page, pageCount, onChange }) {
+  if (pageCount <= 1) return null
+  const win = 2
+  const start = Math.max(0, page - win)
+  const end = Math.min(pageCount - 1, page + win)
+  const nums = []
+  for (let p = start; p <= end; p++) nums.push(p)
+  return (
+    <div className="pager">
+      <button className="pg-btn" disabled={page === 0} onClick={() => onChange(page - 1)} title="이전">‹</button>
+      {start > 0 && (<>
+        <button className="pg-btn" onClick={() => onChange(0)}>1</button>
+        {start > 1 && <span className="pg-gap">…</span>}
+      </>)}
+      {nums.map((p) => (
+        <button key={p} className={`pg-btn${p === page ? ' on' : ''}`} onClick={() => onChange(p)}>{p + 1}</button>
+      ))}
+      {end < pageCount - 1 && (<>
+        {end < pageCount - 2 && <span className="pg-gap">…</span>}
+        <button className="pg-btn" onClick={() => onChange(pageCount - 1)}>{pageCount}</button>
+      </>)}
+      <button className="pg-btn" disabled={page >= pageCount - 1} onClick={() => onChange(page + 1)} title="다음">›</button>
+    </div>
+  )
+}
+
 // 비교 상태 배지
 const CMP_CLS = { 개선: 'pass', 미조치: 'vuln', 악화: 'warn', 양호유지: 'pass', 'N/A': 'na' }
 export function StatusBadge({ v }) {

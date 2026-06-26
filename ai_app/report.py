@@ -745,7 +745,7 @@ def _sheet_summary(ws, S, ctx):
     _hdr_merge(ws, S, 3, 4, 5, 4, "세부 진단항목")
     _hdr_merge(ws, S, 3, 5, 5, 5, "중요도")
     # 결과 컬럼(F) — 진단대상 표기 (원본: 1 / hostname / ip)
-    _header(ws, S, [(3, 6, "결과"), (4, 6, host), (5, 6, ip)])
+    _header(ws, S, [(3, 6, "진단결과"), (4, 6, host), (5, 6, ip)])
     # 우측 집계 헤더(5행) — 원본과 동일 레이아웃
     _header(ws, S, [(5, 8, "영역별점수"), (5, 9, "점수"),
                     (5, 10, "양호"), (5, 11, "취약"), (5, 12, "N/A")])
@@ -811,7 +811,7 @@ def _sheet_detail(ws, S, ctx):
     _hdr_merge(ws, S, 3, 3, 5, 3, "No.")
     _hdr_merge(ws, S, 3, 4, 5, 4, "세부 진단항목")
     _hdr_merge(ws, S, 3, 5, 5, 5, "진단기준")
-    _hdr_merge(ws, S, 3, 6, 5, 6, "결과")
+    _hdr_merge(ws, S, 3, 6, 5, 6, "진단결과")
     _hdr_merge(ws, S, 3, 7, 5, 7, "판단 근거")   # 비고 → 판단 근거
     _hdr_merge(ws, S, 3, 8, 5, 8, "조치 방법")
     for d, rows, r1, r2 in ranges:

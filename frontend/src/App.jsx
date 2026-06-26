@@ -26,7 +26,6 @@ export default function App() {
   const [error, setError] = useState('')
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
   const [sideOpen, setSideOpen] = useState(true)
-  const [runKind, setRunKind] = useState('최초진단')  // 업로드 시 진단 종류(수동 선택)
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
   const [sortKey, setSortKey] = useState('code')     // 'code' | 'severity'
   const [sortDir, setSortDir] = useState('asc')      // 'asc' | 'desc'
@@ -75,16 +74,6 @@ export default function App() {
       setNotice('자산 관리에 추가되었습니다.')
       setTimeout(() => setNotice(''), 3000)
     } catch (e) { setError(String(e.message || e)) }
-  }
-
-  async function onSaveAsset() {
-    if (!session) return
-    try {
-      await api.saveAsset(session.id)
-      setAssetSaved(true); setSaveAsk(null)
-      setNotice('자산 관리에 추가되었습니다.')
-      setTimeout(() => setNotice(''), 3000)
-    } catch (e) { setSaveAsk(null); setError(String(e.message || e)) }
   }
 
   async function onJudge(mode) {
@@ -342,10 +331,6 @@ export default function App() {
           </section>
         )}
       </main>
-
-      {saveAsk && (
-        <SaveAssetModal info={saveAsk} onSave={onSaveAsset} onClose={() => setSaveAsk(null)} />
-      )}
     </div>
   )
 }

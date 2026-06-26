@@ -1,8 +1,10 @@
 // 자산관리: 대상 목록 → 진단기록 → (기록 클릭) 상세. 사이드바 트리로도 바로 진입 가능.
 import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
-import { fmtDateTime, fmtRunOpt, TrashIcon } from './ui.jsx'
+import { fmtDateTime, fmtRunOpt, TrashIcon, Pager } from './ui.jsx'
 import RunDetail from './RunDetail.jsx'
+
+const PAGE_SIZE = 10   // 표 한 페이지에 보이는 행 수(초과 시 번호식 페이지로 분할)
 
 export default function AssetManager({ dark, target, onNavigateAsset, assetsVersion, onAssetsChanged }) {
   const [view, setView] = useState('list')          // 'list' | 'runs' | 'detail'
@@ -11,6 +13,8 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
   const [runs, setRuns] = useState([])
   const [activeRun, setActiveRun] = useState(null)
   const [collapsed, setCollapsed] = useState({})
+  const [listPage, setListPage] = useState(0)   // 자산 목록 페이지
+  const [runPage, setRunPage] = useState(0)     // 진단기록(그룹) 페이지
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const toggleGroup = (fn) => setCollapsed((c) => ({ ...c, [fn]: !c[fn] }))
@@ -33,7 +37,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
   // 사이드바 트리/가운데 클릭(nonce 변경) → 해당 화면으로 이동
   useEffect(() => {
     if (!target?.asset) return
-    setErr(''); setAsset(target.asset); reloadRuns(target.asset.asset_id)
+    setErr(''); setAsset(target.asset); setRunPage(0); reloadRuns(target.asset.asset_id)
     if (target.run) { setActiveRun(target.run); setView('detail') }
     else { setView('runs') }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,6 +74,9 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
 
   // ── 대상 목록 ──
   if (view === 'list') {
+    const pageCount = Math.max(1, Math.ceil(assets.length / PAGE_SIZE))
+    const cur = Math.min(listPage, pageCount - 1)
+    const pagedAssets = assets.slice(cur * PAGE_SIZE, cur * PAGE_SIZE + PAGE_SIZE)
     return (
       <section className="card">
         <div className="card-head">
@@ -87,7 +94,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
             <tbody>
               {assets.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#7e8aa0' }}>
                 {loading ? '불러오는 중…' : '저장된 자산이 없습니다. 업로드 후 "자산 관리에 추가"를 누르면 등록됩니다.'}</td></tr>}
-              {assets.map((a) => (
+              {pagedAssets.map((a) => (
                 <tr key={a.asset_id} style={{ cursor: 'pointer' }} onClick={() => openAsset(a)}>
                   <td className="nm">{a.name || '(이름 없음)'}</td>
                   <td className="code">{a.ip}</td>
@@ -100,6 +107,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
             </tbody>
           </table>
         </div>
+        <Pager page={cur} pageCount={pageCount} onChange={setListPage} />
       </section>
     )
   }
@@ -112,6 +120,9 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
     if (!byFile.has(r.filename)) { const g = { filename: r.filename, runs: [] }; byFile.set(r.filename, g); groups.push(g) }
     byFile.get(r.filename).runs.push(r)
   }
+  const runPageCount = Math.max(1, Math.ceil(groups.length / PAGE_SIZE))
+  const curRunPage = Math.min(runPage, runPageCount - 1)
+  const pagedGroups = groups.slice(curRunPage * PAGE_SIZE, curRunPage * PAGE_SIZE + PAGE_SIZE)
 
   // ── 진단이력(Run) 목록 ──
   return (
@@ -130,7 +141,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
               <th className="c">취약</th><th className="c">양호</th><th className="c">N/A</th><th className="c">삭제</th></tr></thead>
             <tbody>
               {groups.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#7e8aa0' }}>진단 기록이 없습니다.</td></tr>}
-              {groups.map((g) => (
+              {pagedGroups.map((g) => (
                 <React.Fragment key={g.filename}>
                   <tr className="grp-row" onClick={() => toggleGroup(g.filename)}>
                     <td colSpan={7}>
@@ -152,6 +163,7 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
             </tbody>
           </table>
         </div>
+        <Pager page={curRunPage} pageCount={runPageCount} onChange={setRunPage} />
       </section>
     </>
   )
