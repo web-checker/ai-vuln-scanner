@@ -160,7 +160,7 @@ export default function CompareTab() {
               <tbody>
                 {pagedRows.map((r) => (
                   <tr key={r.항목코드}>
-                    <td className="code">{r.항목코드}</td><td>{r.분류}</td><td className="nm">{r.항목}</td>
+                    <td className="code c">{r.항목코드}</td><td className="c">{r.분류}</td><td className="nm">{r.항목}</td>
                     <td className="c"><span className={`sev ${r.중요도}`}>{r.중요도}</span></td>
                     <td className="c"><Pill v={r.최초결과} sm /></td>
                     <td className="c"><Pill v={r.이행결과} sm /></td>
@@ -175,10 +175,6 @@ export default function CompareTab() {
             <a href={api.compareCsvUrl(base, target)}>
               <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 비교 결과 CSV (.csv)</button>
             </a>
-            <button className="btn primary" style={{ width: 'auto', padding: '13px 22px' }}
-              onClick={onSaveReport} disabled={saving}>
-              {saving ? '저장 중…' : '🗎 비교 보고서 저장 (HTML)'}
-            </button>
           </div>
         </section>
       )}

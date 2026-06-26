@@ -6,6 +6,7 @@ import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
 import AssetManager from './AssetManager.jsx'
 import CompareTab from './CompareTab.jsx'
+import ReportTab from './ReportTab.jsx'
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function App() {
@@ -229,20 +230,7 @@ export default function App() {
             </section>
           </>
         ) : (
-          <section className="card">
-            <div className="card-head">
-              <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
-              <div style={{ flex: 1 }}><h2 className="card-title">{reportKind === 'final' ? '최종 보고서' : '최초 보고서'}</h2>
-                <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과 사용</p></div>
-              <ReportSortButtons sortKey={sortKey} toggleSort={toggleSort} sortArrow={sortArrow} />
-            </div>
-            <ReportTable rows={reportRows} />
-            <div className="report-actions">
-              <a href={api.reportXlsxUrl(session.id)}>
-                <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 엑셀 다운로드 (.xlsx)</button>
-              </a>
-            </div>
-          </section>
+          <ReportTab reportKind={reportKind} session={session} sessionItems={items} />
         )}
       </main>
     </div>

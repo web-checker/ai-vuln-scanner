@@ -75,12 +75,6 @@ export default function RunDetail({ run, asset, dark, onBack }) {
               <ReportSortButtons sortKey={sortKey} toggleSort={toggleSort} sortArrow={sortArrow} />
             </div>
             <ReportTable rows={reportRows} />
-            <div className="report-actions">
-              <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}
-                onClick={onSaveReport} disabled={saving}>
-                {saving ? '저장 중…' : '🗎 보고서 저장 (HTML)'}
-              </button>
-            </div>
           </section>
         </>
       )}

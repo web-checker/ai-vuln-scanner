@@ -116,22 +116,80 @@ def _esc(text) -> str:
     return _html.escape(str(text or "")).replace("\n", "<br>")
 
 
+def _guide_remediation(code: str) -> str:
+    """가이드 PDF의 '조치 방법' 절 자동추출(저장값 없을 때 폴백). 실패 시 ''."""
+    try:
+        from . import guide_index
+        path = config.guide_pdf_for_code(code)
+        if path is None:
+            return ""
+        txt = guide_index.remediation_section(str(path), code)
+        return f"[가이드 권고]\n{txt}" if txt else ""
+    except Exception:  # noqa: BLE001  (PDF 파싱 실패 무시)
+        return ""
+
+
 def build_report_df_from_run(run_df: pd.DataFrame) -> pd.DataFrame:
     """저장된 Run CSV(RUN_COLUMNS) → 보고서 DataFrame(REPORT_COLUMNS).
 
     최종결과=확정값 우선·없으면 스크립트결과, 근거=확정근거 우선·없으면 AI근거.
-    스크립트/AI 중 하나라도 취약이면 조치방법 표기(보고서/엑셀 규칙과 동일).
+    스크립트/AI 중 하나라도 취약이면 조치방법 표기. 저장된 조치방법이 비었으면
+    주통기 가이드 PDF의 '조치 방법' 절을 자동 추출해 채운다.
     """
     rows = []
     for _, r in run_df.iterrows():
         script, ai = r.get("스크립트결과", ""), r.get("AI결과", "")
         result = config.final_result(r.get("확정결과", ""), script)
         reason = r.get("확정근거", "") or r.get("AI근거", "")
+        vuln = config.R_VULN in (script, ai)
+        remediation = r.get("조치방법", "")
+        if vuln and not str(remediation).strip():
+            remediation = _guide_remediation(str(r.get("항목코드", "")))
         rows.append(_report_row(
             r, result=result, reason=reason,
-            remediation=r.get("조치방법", ""),
-            show_remed=config.R_VULN in (script, ai)))
+            remediation=remediation, show_remed=vuln))
     return pd.DataFrame(rows, columns=config.REPORT_COLUMNS)
+
+
+# ── 최종 보고서(최초진단 base ↔ 이행점검 target 병합) ──────────────
+def build_final_report_rows(base_df: pd.DataFrame, target_df: pd.DataFrame) -> list[dict]:
+    """두 Run을 항목코드로 병합 → 최종 보고서 표 행(UI용).
+
+    최초결과/최초근거 = base(최초진단), 최종결과/최종근거 = target(이행점검).
+    """
+    brdf = build_report_df_from_run(base_df)
+    trdf = build_report_df_from_run(target_df)
+    tmap = {str(r["항목코드"]): r for _, r in trdf.iterrows()}
+    out = []
+    for _, b in brdf.iterrows():
+        code = str(b["항목코드"])
+        t = tmap.get(code)
+        out.append({
+            "code": code, "group": b["분류"], "severity": b["중요도"], "name": b["항목"],
+            "criteria": b["판단기준"],
+            "firstResult": b["결과"], "firstReason": b["판단근거"],
+            "finalResult": (t["결과"] if t is not None else ""),
+            "finalReason": (t["판단근거"] if t is not None else ""),
+            "target": b["진단대상"], "ip": b["진단대상IP"],
+        })
+    return out
+
+
+def build_final_xlsx(base_df: pd.DataFrame, target_df: pd.DataFrame) -> bytes:
+    """최종 보고서 5시트 xlsx.
+
+    요약/그래프(0·1·2-1·2-2)는 '최종'(이행점검=target) 결과 기준으로 집계되고,
+    3-1 진단 결과 시트만 최초(base)·최종(target) 결과·근거를 8컬럼으로 함께 보인다.
+    """
+    brdf = build_report_df_from_run(base_df)      # 최초진단
+    trdf = build_report_df_from_run(target_df)    # 이행점검(최종) → 요약/그래프 기준
+    base_map = {str(r["항목코드"]): {"result": r["결과"], "reason": r["판단근거"]}
+                for _, r in brdf.iterrows()}
+    wb = _build_workbook(trdf, compare_map=base_map)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 def build_html_report(df: pd.DataFrame, decisions: dict[str, dict],
@@ -540,7 +598,7 @@ def _merge_label(ws, S, r1, r2, col, value):
 def _widths(ws, mapping: dict):
     for col, w in mapping.items():
         ws.column_dimensions[col].width = w
-def _build_workbook(rdf: pd.DataFrame):
+def _build_workbook(rdf: pd.DataFrame, compare_map: dict | None = None):
     from openpyxl import Workbook
     S = _xlsx_styles()
     groups = _grouped(rdf)
@@ -548,7 +606,8 @@ def _build_workbook(rdf: pd.DataFrame):
     targets = _targets(rdf)
     ranges, ds, de, footer = _ranges(groups)
     ctx = {"groups": groups, "counts": counts, "targets": targets,
-           "ranges": ranges, "ds": ds, "de": de, "footer": footer}
+           "ranges": ranges, "ds": ds, "de": de, "footer": footer,
+           "compare_map": compare_map}   # 최종 보고서: 최초진단(base) {result,reason} → 3-1 시트 8컬럼
 
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True   # 열 때 수식 자동 재계산
@@ -787,39 +846,62 @@ def _sheet_summary(ws, S, ctx):
     _auto_width(ws, per_col={"D": (24, 60), "B": (12, 20), "E": (10, 12)})
 def _sheet_detail(ws, S, ctx):
     counts, ranges = ctx["counts"], ctx["ranges"]
-    host = ctx["targets"][0]["hostname"]
+    compare_map = ctx.get("compare_map")   # 최종 보고서: 항목코드→{result,reason} (최초진단 base)
+    is_final = compare_map is not None
     ws.sheet_view.showGridLines = False
-    _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 44, "E": 70, "F": 10, "G": 50, "H": 50})
     ws.row_dimensions[2].height = 26
-    ws.merge_cells("B2:H2")
+    if is_final:
+        # 최종 보고서: 8컬럼 (최초/최종 결과·근거)
+        _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 40, "E": 60, "F": 11, "G": 40, "H": 11, "I": 40})
+        last = 9
+        ws.merge_cells("B2:I2")
+        headers = ["진단항목", "No.", "세부 진단항목", "진단기준",
+                   "최초진단결과", "최초 판단 근거", "최종진단결과", "최종 판단 근거"]
+    else:
+        _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 44, "E": 70, "F": 10, "G": 50, "H": 50})
+        last = 8
+        ws.merge_cells("B2:H2")
+        headers = ["진단항목", "No.", "세부 진단항목", "진단기준", "진단결과", "판단 근거", "조치 방법"]
     tc = ws.cell(row=2, column=2,
                  value=f"{REPORT_META['제목']} 상세 진단결과 ({counts['total']}항목)")
     tc.font = S["Font"](bold=True, size=13); tc.alignment = S["center"]
-    # 헤더(3~5행)
-    _hdr_merge(ws, S, 3, 2, 5, 2, "진단항목")
-    _hdr_merge(ws, S, 3, 3, 5, 3, "No.")
-    _hdr_merge(ws, S, 3, 4, 5, 4, "세부 진단항목")
-    _hdr_merge(ws, S, 3, 5, 5, 5, "진단기준")
-    _hdr_merge(ws, S, 3, 6, 5, 6, "진단결과")
-    _hdr_merge(ws, S, 3, 7, 5, 7, "판단 근거")   # 비고 → 판단 근거
-    _hdr_merge(ws, S, 3, 8, 5, 8, "조치 방법")
+    # 헤더(3~5행 세로병합)
+    for ci, h in enumerate(headers, start=2):
+        _hdr_merge(ws, S, 3, ci, 5, ci, h)
     for d, rows, r1, r2 in ranges:
         for k, row in enumerate(rows):
             r = r1 + k
-            res = str(row.get("결과"))
             ws.cell(row=r, column=3, value=row.get("항목코드"))
             ws.cell(row=r, column=4, value=row.get("항목"))
             ws.cell(row=r, column=5, value=_crit_lines(row.get("판단기준")))   # '|' → 줄바꿈
-            rc = ws.cell(row=r, column=6, value=res)
-            f = _result_fill(S, res)
-            if f:
-                rc.fill = f
-            ws.cell(row=r, column=7, value=row.get("판단근거"))
-            ws.cell(row=r, column=8, value=row.get("조치방법"))
-        _box(ws, S, r1, 2, r2, 8, align=S["leftc"])
+            if is_final:
+                cm = compare_map.get(str(row.get("항목코드")), {})
+                res1 = str(cm.get("result", ""))            # 최초진단(base)
+                rc1 = ws.cell(row=r, column=6, value=res1)
+                if _result_fill(S, res1):
+                    rc1.fill = _result_fill(S, res1)
+                ws.cell(row=r, column=7, value=cm.get("reason", ""))
+                res2 = str(row.get("결과"))                  # 최종(이행점검 = 이 시트 기준 rdf)
+                rc2 = ws.cell(row=r, column=8, value=res2)
+                if _result_fill(S, res2):
+                    rc2.fill = _result_fill(S, res2)
+                ws.cell(row=r, column=9, value=row.get("판단근거"))
+            else:
+                res = str(row.get("결과"))
+                rc = ws.cell(row=r, column=6, value=res)
+                if _result_fill(S, res):
+                    rc.fill = _result_fill(S, res)
+                ws.cell(row=r, column=7, value=row.get("판단근거"))
+                ws.cell(row=r, column=8, value=row.get("조치방법"))
+        _box(ws, S, r1, 2, r2, last, align=S["leftc"])
         for rr in range(r1, r2 + 1):
             ws.cell(row=rr, column=3).alignment = S["center"]   # No.
-            ws.cell(row=rr, column=6).alignment = S["center"]   # 결과
+            ws.cell(row=rr, column=6).alignment = S["center"]   # (최초)결과
+            if is_final:
+                ws.cell(row=rr, column=8).alignment = S["center"]   # 최종결과
         _merge_label(ws, S, r1, r2, 2, d)
     ws.freeze_panes = "A6"
-    _auto_width(ws, per_col={"D": (24, 48), "E": (55, 100), "G": (24, 55), "H": (24, 55), "B": (12, 18)})
+    if is_final:
+        _auto_width(ws, per_col={"D": (24, 44), "E": (45, 90), "G": (24, 50), "I": (24, 50), "B": (12, 18)})
+    else:
+        _auto_width(ws, per_col={"D": (24, 48), "E": (55, 100), "G": (24, 55), "H": (24, 55), "B": (12, 18)})

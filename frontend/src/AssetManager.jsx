@@ -86,12 +86,12 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
         <div className="card-head">
           <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>🖥</div>
           <div style={{ flex: 1 }}><h2 className="card-title">자산 관리</h2>
-            <p className="card-sub">진단대상(IP)별로 진단 이력을 관리합니다 · 대상을 클릭하면 진단 기록과 보고서를 확인할 수 있습니다</p></div>
+            <p className="card-sub">진단대상(IP)별 진단 기록 및 보고서 확인 가능</p></div>
           <button className="sort-btn" onClick={loadAssets}>⟳ 새로고침</button>
         </div>
         {err && <div className="err">{err}</div>}
         <div className="tbl-wrap">
-          <table className="report">
+          <table className="report allc">
             <thead><tr>
               <th>진단대상</th><th>IP</th><th>분류</th><th className="c">진단 횟수</th><th>최근 진단</th><th className="c">삭제</th>
             </tr></thead>
@@ -135,12 +135,12 @@ export default function AssetManager({ dark, target, onNavigateAsset, assetsVers
         <div className="card-head">
           <div className="card-ico" style={{ background: '#e7eefc', color: '#2563eb' }}>📁</div>
           <div style={{ flex: 1 }}><h2 className="card-title">{asset?.name} · {asset?.ip}</h2>
-            <p className="card-sub">최신 진단이 위에 표시됩니다 · 행 클릭 시 요약·보고서 상세로 이동</p></div>
+            <p className="card-sub">행 클릭 시 요약 및 보고서 상세 내역 확인 가능</p></div>
           <button className="sort-btn" onClick={() => setView('list')}>← 자산 목록</button>
         </div>
         {err && <div className="err">{err}</div>}
         <div className="tbl-wrap">
-          <table className="report">
+          <table className="report allc">
             <thead><tr><th>종류</th><th>일시</th><th className="c">합계</th>
               <th className="c">취약</th><th className="c">양호</th><th className="c">N/A</th><th className="c">삭제</th></tr></thead>
             <tbody>

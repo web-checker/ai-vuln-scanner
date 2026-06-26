@@ -1,7 +1,7 @@
 // 요약 대시보드 공유 조각 — App(현재 세션)과 RunDetail(저장된 Run)이 함께 쓴다.
 // KPI·차트·보고서 표·정렬 로직이 두 화면에서 동일하므로 한곳에 모은다.
 import React, { useMemo, useState } from 'react'
-import { Kpi, Pill, formatCriteria, prefResult, isVuln, labelReason } from './ui.jsx'
+import { Kpi, Pill, formatCriteria, prefResult, labelReason } from './ui.jsx'
 import { Chart, Donut, VulnCompare } from './charts.jsx'
 
 const SEV_RANK = { 상: 3, 중: 2, 하: 1 }
@@ -41,9 +41,8 @@ export function ReportTable({ rows }) {
       <table className="report">
         <thead>
           <tr>
-            <th>항목코드</th><th>분류</th><th className="c">중요도</th><th>항목</th><th>판단 기준</th>
-            <th className="c">진단 결과</th><th>판단 근거</th><th>조치 방법</th>
-            <th className="c">진단 대상</th><th className="c">진단 대상 IP</th>
+            <th>항목코드</th><th>분류</th><th>중요도</th><th>항목</th><th>판단 기준</th>
+            <th>진단 결과</th><th>판단 근거</th><th>진단 대상</th><th>진단 대상 IP</th>
           </tr>
         </thead>
         <tbody>
@@ -52,14 +51,13 @@ export function ReportTable({ rows }) {
             const reason = it.finalReason || it.reason || it.check || ''
             return (
               <tr key={it.code}>
-                <td className="code">{it.code}</td>
-                <td>{it.group}</td>
+                <td className="code c">{it.code}</td>
+                <td className="c">{it.group}</td>
                 <td className="c"><span className={`sev ${it.severity}`}>{it.severity}</span></td>
                 <td className="nm">{it.name}</td>
                 <td className="reason" style={{ minWidth: 240 }}>{formatCriteria(it.criteria)}</td>
                 <td className="c"><Pill v={r} /></td>
                 <td className="reason">{labelReason(r, reason)}</td>
-                <td className="reason">{isVuln(it) ? (it.remediation || '') : ''}</td>
                 <td className="c">{it.target}</td>
                 <td className="c">{it.ip}</td>
               </tr>

@@ -53,6 +53,14 @@ export const resetSession = (session_id) => jpost('/api/reset', { session_id })
 
 export const reportXlsxUrl = (sid) => `/api/report.xlsx?session_id=${sid}`
 
+// 최초 보고서: 저장된 Run 1건의 엑셀
+export const runReportXlsxUrl = (runId) => `/api/runs/${encodeURIComponent(runId)}/report.xlsx`
+// 최종 보고서: 최초진단(base) ↔ 이행점검(target) 병합 표(JSON) + 엑셀
+export const getFinalReport = (base, target) =>
+  jfetch(`/api/final-report?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`)
+export const finalReportXlsxUrl = (base, target) =>
+  `/api/final-report.xlsx?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`
+
 // 저장된 Run의 최종 보고서를 HTML로 서버에 저장(report_id = run_id 반환)
 export const saveRunReportHtml = (runId) =>
   jfetch(`/api/runs/${encodeURIComponent(runId)}/report/save`, { method: 'POST' })
