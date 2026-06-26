@@ -16,7 +16,9 @@ CSV는 모두 UTF-8 BOM(utf-8-sig) + dtype=str 로 읽고 쓴다(Excel 호환·�
 """
 from __future__ import annotations
 
+import os
 import shutil
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +26,12 @@ from pathlib import Path
 import pandas as pd
 
 from . import config
+
+# 공유 인덱스 CSV(assets/runs_index/reports_index)의 read-modify-write 를 직렬화.
+# FastAPI 동기 핸들러는 uvicorn 워커 스레드들에서 동시에 도므로, 락 없이는 두 요청이
+# 같은 인덱스를 동시에 갱신할 때 한쪽 변경이 통째로 유실된다(lost update).
+# RLock — 같은 스레드가 중첩 호출(예: delete_asset→내부 정리)해도 데드락 없게.
+_INDEX_LOCK = threading.RLock()
 
 # 인덱스 CSV 컬럼
 ASSET_COLUMNS = ["asset_id", "진단대상명", "진단대상IP", "분류", "최초등록일", "최근진단일"]
@@ -54,9 +62,15 @@ def _read_index(path: Path, columns: list[str]) -> pd.DataFrame:
 
 
 def _write_csv(path: Path, df: pd.DataFrame) -> None:
-    """DataFrame을 UTF-8 BOM CSV로 저장(Excel 한글 호환)."""
+    """DataFrame을 UTF-8 BOM CSV로 '원자적' 저장(Excel 한글 호환).
+
+    임시파일에 쓴 뒤 os.replace 로 교체 → 동시 읽기가 '쓰다 만' 부분 파일을
+    절대 보지 못한다(to_csv 의 truncate+write 는 비원자적이라 그 사이 읽기가 깨질 수 있음).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, encoding="utf-8-sig")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    df.to_csv(tmp, index=False, encoding="utf-8-sig")
+    os.replace(tmp, path)  # 같은 디렉터리 내 교체는 원자적
 
 
 def _upsert(df: pd.DataFrame, key_col: str, meta: dict) -> pd.DataFrame:
@@ -111,22 +125,23 @@ def register_asset(name: str, ip: str, group: str) -> str:
     _ensure_dirs()
     aid = asset_id_for(ip)
     now = _now_iso()
-    df = _read_index(config.ASSETS_CSV, ASSET_COLUMNS)
-    mask = df["asset_id"] == aid
-    if mask.any():  # 기존 자산: 대표값은 새 값 우선, 빈 값이면 보존. 최초등록일은 유지.
-        i = df.index[mask][0]
-        meta = {
-            "asset_id": aid,
-            "진단대상명": name or df.at[i, "진단대상명"],
-            "진단대상IP": ip or df.at[i, "진단대상IP"],
-            "분류": group or df.at[i, "분류"],
-            "최초등록일": df.at[i, "최초등록일"],
-            "최근진단일": now,
-        }
-    else:
-        meta = {"asset_id": aid, "진단대상명": name, "진단대상IP": ip, "분류": group,
-                "최초등록일": now, "최근진단일": now}
-    _write_csv(config.ASSETS_CSV, _upsert(df, "asset_id", meta))
+    with _INDEX_LOCK:
+        df = _read_index(config.ASSETS_CSV, ASSET_COLUMNS)
+        mask = df["asset_id"] == aid
+        if mask.any():  # 기존 자산: 대표값은 새 값 우선, 빈 값이면 보존. 최초등록일은 유지.
+            i = df.index[mask][0]
+            meta = {
+                "asset_id": aid,
+                "진단대상명": name or df.at[i, "진단대상명"],
+                "진단대상IP": ip or df.at[i, "진단대상IP"],
+                "분류": group or df.at[i, "분류"],
+                "최초등록일": df.at[i, "최초등록일"],
+                "최근진단일": now,
+            }
+        else:
+            meta = {"asset_id": aid, "진단대상명": name, "진단대상IP": ip, "분류": group,
+                    "최초등록일": now, "최근진단일": now}
+        _write_csv(config.ASSETS_CSV, _upsert(df, "asset_id", meta))
     return aid
 
 
@@ -213,22 +228,24 @@ def save_run(asset_id: str, run_id: str, kind: str, filename: str, run_df: pd.Da
         "양호": str(int((finals == config.R_PASS).sum())),
         "NA": str(int((finals == config.R_NA).sum())),
     }
-    idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
-    mask = idx["run_id"] == run_id
-    if mask.any():  # 최초 등록 일시는 보존하고 카운트/종류/파일명만 갱신
-        meta["일시"] = idx.at[idx.index[mask][0], "일시"] or meta["일시"]
-    _write_csv(config.RUNS_INDEX_CSV, _upsert(idx, "run_id", meta))
+    with _INDEX_LOCK:
+        idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
+        mask = idx["run_id"] == run_id
+        if mask.any():  # 최초 등록 일시는 보존하고 카운트/종류/파일명만 갱신
+            meta["일시"] = idx.at[idx.index[mask][0], "일시"] or meta["일시"]
+        _write_csv(config.RUNS_INDEX_CSV, _upsert(idx, "run_id", meta))
     return meta
 
 
 def set_run_kind(run_id: str, kind: str) -> bool:
     """진단실행(Run)의 종류(최초진단/이행점검)를 변경. 비교 탭에서 사용. 성공 여부 반환."""
-    idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
-    mask = idx["run_id"] == run_id
-    if not mask.any():
-        return False
-    idx.loc[mask, "종류"] = kind
-    _write_csv(config.RUNS_INDEX_CSV, idx)
+    with _INDEX_LOCK:
+        idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
+        mask = idx["run_id"] == run_id
+        if not mask.any():
+            return False
+        idx.loc[mask, "종류"] = kind
+        _write_csv(config.RUNS_INDEX_CSV, idx)
     return True
 
 
@@ -277,8 +294,9 @@ def _register_report(report_id: str, rel: str, *, report_type: str,
         "진단대상명": name, "진단대상IP": ip, "종류": kind,
         "일시": _now_iso(), "원본파일명": filename or "", "파일명": rel,
     }
-    idx = _read_index(config.REPORTS_INDEX_CSV, REPORT_INDEX_COLUMNS)
-    _write_csv(config.REPORTS_INDEX_CSV, _upsert(idx, "report_id", meta))
+    with _INDEX_LOCK:
+        idx = _read_index(config.REPORTS_INDEX_CSV, REPORT_INDEX_COLUMNS)
+        _write_csv(config.REPORTS_INDEX_CSV, _upsert(idx, "report_id", meta))
     return meta
 
 
@@ -409,9 +427,10 @@ def compare_df(base_run_id: str, target_run_id: str) -> pd.DataFrame:
 
 # ── 삭제 ───────────────────────────────────────────────────────
 def _remove_asset_entry(asset_id: str) -> None:
-    assets = _read_index(config.ASSETS_CSV, ASSET_COLUMNS)
-    assets = assets[assets["asset_id"] != asset_id]
-    _write_csv(config.ASSETS_CSV, assets)
+    with _INDEX_LOCK:
+        assets = _read_index(config.ASSETS_CSV, ASSET_COLUMNS)
+        assets = assets[assets["asset_id"] != asset_id]
+        _write_csv(config.ASSETS_CSV, assets)
 
 
 def delete_run(run_id: str) -> bool:
@@ -419,27 +438,29 @@ def delete_run(run_id: str) -> bool:
 
     삭제 후 해당 자산에 Run이 하나도 없으면 자산 자체도 목록에서 제거한다.
     """
-    idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
-    row = idx[idx["run_id"] == run_id]
-    if not len(row):
-        return False
-    asset_id = row.iloc[0]["asset_id"]
-    csv_path = config.RUNS_DIR / asset_id / f"{run_id}.csv"
-    if csv_path.exists():
-        csv_path.unlink()
-    idx = idx[idx["run_id"] != run_id]
-    _write_csv(config.RUNS_INDEX_CSV, idx)
-    if not len(idx[idx["asset_id"] == asset_id]):
-        _remove_asset_entry(asset_id)
-        shutil.rmtree(config.RUNS_DIR / asset_id, ignore_errors=True)
+    with _INDEX_LOCK:
+        idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
+        row = idx[idx["run_id"] == run_id]
+        if not len(row):
+            return False
+        asset_id = row.iloc[0]["asset_id"]
+        csv_path = config.RUNS_DIR / asset_id / f"{run_id}.csv"
+        if csv_path.exists():
+            csv_path.unlink()
+        idx = idx[idx["run_id"] != run_id]
+        _write_csv(config.RUNS_INDEX_CSV, idx)
+        if not len(idx[idx["asset_id"] == asset_id]):
+            _remove_asset_entry(asset_id)
+            shutil.rmtree(config.RUNS_DIR / asset_id, ignore_errors=True)
     return True
 
 
 def delete_asset(asset_id: str) -> bool:
     """자산 + 그 자산의 모든 Run 기록을 삭제."""
-    _remove_asset_entry(asset_id)
-    idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
-    idx = idx[idx["asset_id"] != asset_id]
-    _write_csv(config.RUNS_INDEX_CSV, idx)
-    shutil.rmtree(config.RUNS_DIR / asset_id, ignore_errors=True)
+    with _INDEX_LOCK:
+        _remove_asset_entry(asset_id)
+        idx = _read_index(config.RUNS_INDEX_CSV, RUN_INDEX_COLUMNS)
+        idx = idx[idx["asset_id"] != asset_id]
+        _write_csv(config.RUNS_INDEX_CSV, idx)
+        shutil.rmtree(config.RUNS_DIR / asset_id, ignore_errors=True)
     return True

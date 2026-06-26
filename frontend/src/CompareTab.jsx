@@ -1,9 +1,24 @@
 // 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 전이 상태 비교.
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
 import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, RUN_KINDS } from './ui.jsx'
 
+// 비교 대상 카드 — 모듈 레벨에 두어 매 렌더마다 새 컴포넌트로 인식되어 리마운트되는 것을 막는다.
+function TargetCard({ label, run }) {
+  return (
+    <div className="cmp-target">
+      <div className="ct-label">{label}</div>
+      <span className={`pill ${run?.kind === RUN_FIRST ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
+      <div className="ct-meta">{fmtDateTime(run?.at)}</div>
+      <div className="ct-file">{run?.filename || '—'}</div>
+      <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
+    </div>
+  )
+}
+
 export default function CompareTab() {
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])  // 언마운트 후 async setState 차단
   const [assets, setAssets] = useState([])
   const [assetId, setAssetId] = useState('')
   const [runs, setRuns] = useState([])
@@ -40,19 +55,21 @@ export default function CompareTab() {
     if (!aid) { setRuns([]); setBase(''); setTarget(''); return }
     try {
       const r = await api.getAssetRuns(aid)
+      if (!mounted.current) return
       const rs = r.runs || []
       setRuns(rs)
       setBase(rs[0]?.run_id || '')
       setTarget(rs.length > 1 ? rs[rs.length - 1].run_id : (rs[0]?.run_id || ''))
-    } catch (e) { setErr(String(e.message || e)) }
+    } catch (e) { if (mounted.current) setErr(String(e.message || e)) }
   }
 
   useEffect(() => {
     api.getAssets().then((r) => {
+      if (!mounted.current) return
       const list = r.assets || []
       setAssets(list)
       if (list[0]) selectAsset(list[0].asset_id)
-    }).catch((e) => setErr(String(e.message || e)))
+    }).catch((e) => { if (mounted.current) setErr(String(e.message || e)) })
   }, [])
 
   async function runCompare() {
@@ -80,16 +97,7 @@ export default function CompareTab() {
   }
   const s = cmp?.summary || {}
   const rows = (cmp?.rows || []).filter((r) => filter === '전체' || r.상태 === filter)
-
-  const TargetCard = ({ label, run }) => (
-    <div className="cmp-target">
-      <div className="ct-label">{label}</div>
-      <span className={`pill ${run?.kind === RUN_FIRST ? 'info' : 'warn'} sm`}>{run?.kind || '—'}</span>
-      <div className="ct-meta">{fmtDateTime(run?.at)}</div>
-      <div className="ct-file">{run?.filename || '—'}</div>
-      <div className="ct-vuln">취약 {run?.vuln ?? 0}건</div>
-    </div>
-  )
+  const runOpts = runOptions()   // 기준/비교 두 select 가 공유 — 렌더당 한 번만 계산
 
   return (
     <>
@@ -112,14 +120,14 @@ export default function CompareTab() {
           <div className="cmp-pick-field">
             <label>기준 파일</label>
             <select value={base} onChange={(e) => setBase(e.target.value)}>
-              {runOptions()}
+              {runOpts}
             </select>
           </div>
           <div className="cmp-vs">→</div>
           <div className="cmp-pick-field">
             <label>비교 파일</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {runOptions()}
+              {runOpts}
             </select>
           </div>
           <button className="btn primary" style={{ width: 'auto', padding: '11px 22px' }}

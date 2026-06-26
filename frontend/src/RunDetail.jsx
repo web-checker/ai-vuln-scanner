@@ -13,9 +13,13 @@ export default function RunDetail({ run, asset, dark, onBack }) {
   const { sortKey, toggleSort, sortArrow, reportRows } = useReportSort(items)
 
   useEffect(() => {
+    let alive = true   // 언마운트/run 변경 후 stale setState 방지(← 진단기록 버튼 등)
     setLoading(true); setErr('')
-    api.getRun(run.run_id).then((r) => setItems(r.items || []))
-      .catch((e) => setErr(String(e.message || e))).finally(() => setLoading(false))
+    api.getRun(run.run_id)
+      .then((r) => { if (alive) setItems(r.items || []) })
+      .catch((e) => { if (alive) setErr(String(e.message || e)) })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
   }, [run.run_id])
 
   const summary = useMemo(() => {

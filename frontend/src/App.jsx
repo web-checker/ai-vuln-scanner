@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from './api.js'
 import { MoonIcon, Pill, prefResult } from './ui.jsx'
 import { useReportSort, ReportSortButtons, ReportTable, SummaryCharts } from './dashboard.jsx'
@@ -48,6 +48,10 @@ export default function App() {
 
   const doneCount = items.filter((it) => it.ai).length
 
+  // 현재 세션을 ref로 추적 — 판정 스트림(onJudge) 도중 리셋/세션변경 시 stale 반영 차단용
+  const sessionRef = useRef(session)
+  useEffect(() => { sessionRef.current = session }, [session])
+
   async function onUpload(file) {
     setError('')
     try {
@@ -73,9 +77,11 @@ export default function App() {
 
   async function onJudge(mode) {
     if (!session) return
+    const sid = session.id   // 이 진단 세션 고정 — 도중 리셋되면 stale 반영을 막는다
     setError(''); setJudging(true); setProgress({ done: 0, total: 0 })
     try {
-      for await (const ev of api.judgeStream(session.id, mode)) {
+      for await (const ev of api.judgeStream(sid, mode)) {
+        if (sessionRef.current?.id !== sid) break   // 리셋/세션변경 → 소비·반영 중단
         if (ev.event === 'start') setProgress({ done: 0, total: ev.total })
         else if (ev.event === 'item') {
           setProgress({ done: ev.done, total: ev.total })
@@ -85,10 +91,12 @@ export default function App() {
             : it))
         }
       }
-      const st = await api.getState(session.id)
+      if (sessionRef.current?.id !== sid) return     // 종료 후 세션이 바뀌었으면 덮어쓰지 않음
+      const st = await api.getState(sid)
+      if (sessionRef.current?.id !== sid) return
       setItems(st.items); setSummary(st.summary)
-    } catch (e) { setError(String(e.message || e)) }
-    finally { setJudging(false); setCancelling(false) }
+    } catch (e) { if (sessionRef.current?.id === sid) setError(String(e.message || e)) }
+    finally { setJudging(false); setCancelling(false) }   // UI 플래그는 항상 해제(멈춤 방지)
   }
 
   async function onCancelJudge() {
@@ -118,10 +126,10 @@ export default function App() {
     } catch (e) { setError(String(e.message || e)) }
   }
 
-  const shown = items.filter((it) => {
+  const shown = useMemo(() => items.filter((it) => {
     const q = query.trim().toLowerCase()
     return !q || it.code.toLowerCase().includes(q) || (it.name || '').toLowerCase().includes(q)
-  })
+  }), [items, query])
   const selItem = items.find((it) => it.code === selected) || null
 
   // KPI 계산

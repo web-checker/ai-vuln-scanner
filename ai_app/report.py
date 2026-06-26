@@ -423,7 +423,8 @@ def _grouped(rdf: pd.DataFrame):
 
 
 def _counts(rdf: pd.DataFrame) -> dict:
-    res = [str(x) for x in rdf["결과"]]
+    # '결과' 컬럼이 없거나 빈 df 여도 KeyError 없이 0 집계(빈 보고서·임의 df 방어).
+    res = [str(x) for x in rdf["결과"]] if "결과" in rdf.columns else []
     p = res.count(config.R_PASS)
     v = res.count(config.R_VULN)
     n = res.count(config.R_NA)
