@@ -28,10 +28,10 @@ REPORT_META = {
     "보안등급": "Confidential",
     "Ver": "ver 1.0",
     "제목": 'Check방 취약점 진단',
-    "부제": "서버 취약점 진단 상세결과",
+    "부제": "취약점 진단 상세결과",
 }
-# 진단대상 시트에서 CSV에 없는 칸의 기본값
-TARGET_DEFAULTS = {"버전정보": "-", "용도": "서버", "비고": "-"}
+# 진단대상 시트에서 CSV에 없는 칸의 기본값(용도는 수기 기입용으로 공란)
+TARGET_DEFAULTS = {"버전정보": "-", "용도": "", "비고": "-"}
 
 
 def _label_reason(result: str, reason: str) -> str:
@@ -651,7 +651,7 @@ def _sheet_targets(ws, S, ctx):
     _widths(ws, {"A": 2, "B": 6, "C": 22, "D": 16, "E": 34, "F": 12, "G": 26})
     ws.row_dimensions[1].height = 26
     ws.cell(row=1, column=2,
-            value=f"  ※ 진단 대상 리스트 - 서버 {len(targets)}대").font = S["Font"](bold=True)
+            value="  ※ 진단 대상 리스트").font = S["Font"](bold=True)
     # 헤더 (2~3행)
     _hdr_merge(ws, S, 2, 2, 3, 2, "순번")
     _hdr_merge(ws, S, 2, 3, 2, 6, "진단 대상")
@@ -664,7 +664,7 @@ def _sheet_targets(ws, S, ctx):
         r = start + i
         ws.row_dimensions[r].height = 24
         ws.cell(row=r, column=2, value=i + 1)
-        ws.cell(row=r, column=3, value=t["hostname"])
+        ws.cell(row=r, column=3, value="")          # Hostname: 수기 기입용 공란
         ws.cell(row=r, column=4, value=t["ip"])
         ws.cell(row=r, column=5, value=TARGET_DEFAULTS["버전정보"])
         ws.cell(row=r, column=6, value=TARGET_DEFAULTS["용도"])
