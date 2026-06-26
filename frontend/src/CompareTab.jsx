@@ -31,20 +31,6 @@ export default function CompareTab() {
   const [page, setPage] = useState(0)        // 비교 결과표 페이지
   const [kindPage, setKindPage] = useState(0) // 진단 종류 지정(실행 목록) 페이지
   const [err, setErr] = useState('')
-  const [notice, setNotice] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function onSaveReport() {
-    if (saving || !base || !target) return
-    setSaving(true); setErr('')
-    try {
-      const res = await api.saveCompareReport(base, target)
-      setNotice(`비교 보고서가 저장되었습니다 → ${res.path}`)
-      setTimeout(() => setNotice(''), 8000)
-      window.open(api.savedReportUrl(res.report_id), '_blank', 'noopener')
-    } catch (e) { setErr(String(e.message || e)) }
-    finally { setSaving(false) }
-  }
 
   const selectAsset = async (aid) => {
     setAssetId(aid); setCmp(null); setErr(''); setKindPage(0)
@@ -107,7 +93,6 @@ export default function CompareTab() {
             <p className="card-sub">2개의 비교 파일 선택</p></div>
         </div>
         {err && <div className="err">{err}</div>}
-        {notice && <div className="notice">{notice}</div>}
         <div className="cmp-pick" style={{ padding: '4px 22px 18px' }}>
           <div className="cmp-pick-field">
             <label>진단 대상</label>

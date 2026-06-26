@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from './api.js'
 import { MoonIcon, Pill, prefResult } from './ui.jsx'
-import { useReportSort, ReportSortButtons, ReportTable, SummaryCharts } from './dashboard.jsx'
+import { SummaryCharts } from './dashboard.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
 import AssetManager from './AssetManager.jsx'
@@ -40,8 +40,6 @@ export default function App() {
     setTab('assets')
     setAssetTarget((t) => ({ asset, run, nonce: (t?.nonce || 0) + 1 }))
   }
-
-  const { sortKey, toggleSort, sortArrow, reportRows } = useReportSort(items)
 
   useEffect(() => { api.getHealth().then(setHealth).catch(() => setHealth({ ready: false, message: '백엔드 연결 실패', backend: '-' })) }, [])
   useEffect(() => {
