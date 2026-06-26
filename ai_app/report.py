@@ -1,8 +1,15 @@
 """
-최종 보고서(Excel) 생성.
+최종 보고서 생성 (CSV / Excel).
 
-검토 완료된 결과를 보고서 양식(REPORT_COLUMNS)으로 변환해 .xlsx 바이트를 반환한다.
-보고서 컬럼: 항목코드, 분류, 항목, 판단기준, 결과, 판단근거, 진단대상, 진단대상IP, 중요도
+Excel(.xlsx) 은 외부 양식을 그대로 따른 5개 시트로 구성한다:
+  0. 표지            - 문서 메타정보 + 제목(기본값, 엑셀에서 수정 가능)
+  1. 진단 대상       - 서버(Hostname/IP/버전/용도) 목록
+  2-1. 요약결과(그래프) - 도메인 평균점수 / 양호·취약·N/A / 영역별 취약수 (+ 차트)
+  2-2. 요약 진단결과 - 항목별 결과표 + 영역별 점수 + 보안 적용율
+  3-1. 진단 결과     - 항목별 상세(진단기준/결과/비고)
+
+점수 규칙: 영역점수 = 양호 / (양호 + 취약)  (N/A 제외). 보안 적용율도 동일.
+모두 순수 파이썬(LLM 호출 없음) → 토큰 0.
 """
 from __future__ import annotations
 
@@ -26,11 +33,12 @@ REPORT_META = {
 # 진단대상 시트에서 CSV에 없는 칸의 기본값
 TARGET_DEFAULTS = {"버전정보": "-", "용도": "서버", "비고": "-"}
 
-def build_csv_report(df: pd.DataFrame, decisions: dict[str, dict]) -> bytes:
-    """[보고서 양식 함수] 원본 df + 확정 판정 → CSV 보고서 바이트(한 번에).
 
-    순수 파이썬으로 양식(REPORT_COLUMNS)대로 조립한다. LLM 호출 없음 → 토큰 0.
-    """
+# ════════════════════════════════════════════════════════════════
+#  CSV 보고서 (기존)
+# ════════════════════════════════════════════════════════════════
+def build_csv_report(df: pd.DataFrame, decisions: dict[str, dict]) -> bytes:
+    """원본 df + 확정 판정 → CSV 보고서 바이트."""
     return to_csv_bytes(build_report_df(df, decisions))
 
 
@@ -40,36 +48,33 @@ def _label_reason(result: str, reason: str) -> str:
 
 
 def build_report_df(df: pd.DataFrame, decisions: dict[str, dict]) -> pd.DataFrame:
-    """원본 CSV DataFrame + 확정된 판정(decisions)을 보고서 DataFrame으로 변환.
-
-    decisions: {항목코드: {"result": ..., "reason": ...}}
-      - result/reason 이 없으면 스크립트 결과/점검요약으로 폴백.
-    """
+    """원본 CSV DataFrame + 확정 판정(decisions)을 보고서 DataFrame으로 변환."""
     rows = []
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
         dec = decisions.get(code, {})
-        result = dec.get("result") or row.get("결과", "")
+        result = config.final_result(dec.get("result", ""), row.get("결과", ""))
         reason = dec.get("reason") or restore_multiline(row.get("점검내용", ""))
+        remediation = dec.get("remediation", "")
+        # 조치방법은 스크립트/AI 중 하나라도 '취약'이면 표기(양호·N/A 단독이면 공란)
+        show_remed = dec.get("vuln_any", result == config.R_VULN)
         rows.append({
             "항목코드": code,
             "분류": row.get("분류", ""),
+            "중요도": row.get("중요도", ""),
             "항목": row.get("항목", ""),
-            "판단기준": row.get("판단기준", ""),
+            "판단기준": _crit_lines(row.get("판단기준", "")),
             "결과": result,
-            "판단근거": reason,
+            "판단근거": _label_reason(result, reason),
+            "조치방법": remediation if show_remed else "",
             "진단대상": row.get("진단대상", ""),
             "진단대상IP": row.get("진단대상IP", ""),
-            "중요도": row.get("중요도", ""),
         })
     return pd.DataFrame(rows, columns=config.REPORT_COLUMNS)
 
 
 def to_csv_bytes(report_df: pd.DataFrame) -> bytes:
-    """보고서 DataFrame을 CSV 바이트로 변환.
-
-    Excel 한글깨짐 방지 UTF-8 BOM + 모든 필드 큰따옴표 인용(줄바꿈 포함 안전).
-    """
+    """보고서 DataFrame → CSV 바이트(UTF-8 BOM, 전체 인용)."""
     import csv
 
     csv_text = report_df.to_csv(index=False, quoting=csv.QUOTE_ALL, lineterminator="\n")
@@ -100,11 +105,6 @@ def build_compare_csv(compare_df: pd.DataFrame) -> bytes:
     """비교 결과 DataFrame(COMPARE_COLUMNS)을 CSV 바이트로(UTF-8 BOM + 전체 인용)."""
     return to_csv_bytes(compare_df)
 
-    header_fill = PatternFill("solid", fgColor="1F4E78")
-    header_font = Font(bold=True, color="FFFFFF")
-    pass_fill = PatternFill("solid", fgColor="E2EFDA")   # 연녹
-    vuln_fill = PatternFill("solid", fgColor="FCE4E4")   # 연적
-    na_fill = PatternFill("solid", fgColor="EDEDED")     # 회색
 
 # ════════════════════════════════════════════════════════════════
 #  HTML 보고서 (자체 완결형 — 인라인 CSS, 오프라인 열람·인쇄 가능)

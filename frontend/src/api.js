@@ -12,9 +12,10 @@ async function jfetch(url, opts) {
 
 export const getHealth = () => jfetch('/api/health')
 
-export function uploadCsv(file) {
+export function uploadCsv(file, runKind = '최초진단') {
   const fd = new FormData()
   fd.append('file', file)
+  fd.append('run_kind', runKind)
   return jfetch('/api/upload', { method: 'POST', body: fd })
 }
 

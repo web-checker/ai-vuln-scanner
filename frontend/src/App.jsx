@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import * as api from './api.js'
 import { Kpi, MoonIcon, Pill, matchLabel, formatCriteria, prefResult, isVuln, labelReason } from './ui.jsx'
 import { Chart, Donut, VulnCompare } from './charts.jsx'
@@ -26,6 +26,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
   const [sideOpen, setSideOpen] = useState(true)
+  const [runKind, setRunKind] = useState('최초진단')  // 업로드 시 진단 종류(수동 선택)
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
   const [sortKey, setSortKey] = useState('code')     // 'code' | 'severity'
   const [sortDir, setSortDir] = useState('asc')      // 'asc' | 'desc'
@@ -76,6 +77,16 @@ export default function App() {
     } catch (e) { setError(String(e.message || e)) }
   }
 
+  async function onSaveAsset() {
+    if (!session) return
+    try {
+      await api.saveAsset(session.id)
+      setAssetSaved(true); setSaveAsk(null)
+      setNotice('자산 관리에 추가되었습니다.')
+      setTimeout(() => setNotice(''), 3000)
+    } catch (e) { setSaveAsk(null); setError(String(e.message || e)) }
+  }
+
   async function onJudge(mode) {
     if (!session) return
     setError(''); setJudging(true); setProgress({ done: 0, total: 0 })
@@ -85,8 +96,9 @@ export default function App() {
         else if (ev.event === 'item') {
           setProgress({ done: ev.done, total: ev.total })
           setItems((prev) => prev.map((it) => it.code === ev.code
-            ? { ...it, ai: ev.result, reason: ev.reason, source: ev.source, confidence: ev.confidence,
-                match: !ev.result ? '미판정' : (ev.result === it.script ? '일치' : '불일치') }
+            ? { ...it, ai: ev.result, reason: ev.reason, remediation: ev.remediation,
+                source: ev.source, confidence: ev.confidence,
+                match: matchLabel(ev.result, it.script) }
             : it))
         }
       }
@@ -162,10 +174,11 @@ export default function App() {
 
       <main className="main">
         <div className="topbar">
-          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : '최종 보고서'}</div>
+          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? '최종 보고서' : tab === 'assets' ? '자산관리' : '진단 결과 비교'}</div>
           <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : <><MoonIcon />다크</>}</button>
         </div>
 
+        {notice && <div className="notice">{notice}</div>}
         {error && <div className="err">{error}</div>}
 
         {tab === 'assets' ? (
@@ -203,12 +216,11 @@ export default function App() {
                     <p className="card-sub">자동화 스크립트 / AI 등급별 비교</p>
                   </div>
                   <div className="chart-legend">
-                    <span className="row"><span className="sw" style={{ background: '#ef4444' }} /> 스크립트</span>
+                    <span className="row"><span className="sw" style={{ background: '#FFBB00' }} /> 스크립트</span>
                     <span className="row"><span className="sw" style={{ background: '#2563eb' }} /> AI</span>
                   </div>
                 </div>
                 <div style={{ padding: '18px 22px 12px' }}>
-                  {judged.length === 0 && <div className="hint">※ "AI 교차 진단" 실행 시 AI(파랑) 막대가 채워집니다.</div>}
                   <Chart summary={summary} dark={dark} />
                   {(judging || progress.total > 0) && (
                     <>
@@ -241,7 +253,7 @@ export default function App() {
               <div className="card-head">
                 <div className="card-ico">📋</div>
                 <div><h2 className="card-title">진단 결과 상세</h2>
-                  <p className="card-sub">행을 클릭하면 자동화·AI 판단 근거를 비교합니다.</p></div>
+                  <p className="card-sub">행 클릭 시 자동화·AI 판단 근거 확인 가능 </p></div>
               </div>
               <div className="master">
                 <div>
@@ -281,7 +293,7 @@ export default function App() {
             <div className="card-head">
               <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
               <div style={{ flex: 1 }}><h2 className="card-title">최종 보고서</h2>
-                <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과를 사용합니다.</p></div>
+                <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과 사용</p></div>
               <div className="sort-bar">
                 <button className={`sort-btn${sortKey === 'code' ? ' on' : ''}`} onClick={() => toggleSort('code')}>항목코드 {sortArrow('code')}</button>
                 <button className={`sort-btn${sortKey === 'severity' ? ' on' : ''}`} onClick={() => toggleSort('severity')}>중요도 {sortArrow('severity')}</button>
@@ -291,9 +303,9 @@ export default function App() {
               <table className="report">
                 <thead>
                   <tr>
-                    <th>항목코드</th><th>분류</th><th>항목</th><th>판단 기준</th>
-                    <th className="c">결과</th><th>판단 근거</th>
-                    <th className="c">진단 대상</th><th className="c">진단 대상 IP</th><th className="c">중요도</th>
+                    <th>항목코드</th><th>분류</th><th className="c">중요도</th><th>항목</th><th>판단 기준</th>
+                    <th className="c">결과</th><th>판단 근거</th><th>조치 방법</th>
+                    <th className="c">진단 대상</th><th className="c">진단 대상 IP</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -304,13 +316,14 @@ export default function App() {
                       <tr key={it.code}>
                         <td className="code">{it.code}</td>
                         <td>{it.group}</td>
+                        <td className="c"><span className={`sev ${it.severity}`}>{it.severity}</span></td>
                         <td className="nm">{it.name}</td>
-                        <td className="reason" style={{ minWidth: 240 }}>{it.criteria}</td>
+                        <td className="reason" style={{ minWidth: 240 }}>{formatCriteria(it.criteria)}</td>
                         <td className="c"><Pill v={r} /></td>
-                        <td className="reason">{reason}</td>
+                        <td className="reason">{labelReason(r, reason)}</td>
+                        <td className="reason">{isVuln(it) ? (it.remediation || '') : ''}</td>
                         <td className="c">{it.target}</td>
                         <td className="c">{it.ip}</td>
-                        <td className="c"><span className={`sev ${it.severity}`}>{it.severity}</span></td>
                       </tr>
                     )
                   })}
@@ -329,6 +342,10 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {saveAsk && (
+        <SaveAssetModal info={saveAsk} onSave={onSaveAsset} onClose={() => setSaveAsk(null)} />
+      )}
     </div>
   )
 }

@@ -157,12 +157,12 @@ button { font-family: var(--font); }
 .vcmp-name { font-size: 13px; font-weight: 800; color: var(--slate); }
 .vcmp-cnt { font-size: 20px; font-weight: 900; text-align: right; letter-spacing: -0.02em; line-height: 1; }
 .vcmp-cnt.ai { color: var(--brand); }
-.vcmp-cnt.script { color: var(--bad); }
+.vcmp-cnt.script { color: #f97316; }
 .vcmp-track { position: relative; height: 14px; border-radius: 8px; background: #eef2f8; overflow: hidden; }
 .vcmp-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 8px; transition: width .45s ease; }
 .vcmp-fill:not(.empty) { min-width: 7px; }
 .vcmp-fill.ai { background: linear-gradient(90deg, #3b82f6, #2563eb); }
-.vcmp-fill.script { background: linear-gradient(90deg, #f87171, #ef4444); }
+.vcmp-fill.script { background: linear-gradient(90deg, #fb923c, #f97316); }
 .vcmp-fill.empty { background: transparent; }
 .vcmp-end { font-size: 13px; font-weight: 800; color: var(--mute); text-align: right; }
 .vcmp-foot { font-size: 11.5px; font-weight: 700; color: var(--mute); text-align: right; }
