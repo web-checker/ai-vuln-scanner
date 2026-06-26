@@ -42,7 +42,7 @@ export function ReportTable({ rows }) {
         <thead>
           <tr>
             <th>항목코드</th><th>분류</th><th className="c">중요도</th><th>항목</th><th>판단 기준</th>
-            <th className="c">결과</th><th>판단 근거</th><th>조치 방법</th>
+            <th className="c">진단 결과</th><th>판단 근거</th><th>조치 방법</th>
             <th className="c">진단 대상</th><th className="c">진단 대상 IP</th>
           </tr>
         </thead>

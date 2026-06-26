@@ -614,72 +614,107 @@ def _sheet_targets(ws, S, ctx):
     _auto_width(ws, per_col={"E": (20, 40), "G": (16, 30), "C": (14, 26)})
 def _sheet_graph(ws, S, ctx):
     from openpyxl.chart import BarChart, PieChart, RadarChart, Reference
+    from openpyxl.chart.layout import Layout, ManualLayout
+    from openpyxl.chart.shapes import GraphicalProperties
+    from openpyxl.chart.text import RichText
+    from openpyxl.drawing.line import LineProperties
+    from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
+    from openpyxl.drawing.text import CharacterProperties, Paragraph, ParagraphProperties
+    from openpyxl.styles import PatternFill
     groups, ranges = ctx["groups"], ctx["ranges"]
     ds, de = ctx["ds"], ctx["de"]
     ref = lambda a: f"'{SUMMARY_SHEET}'!{a}"   # noqa: E731
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2, "B": 16, "C": 11})
     n = len(groups)
+    STEP, SIDE = 23, 10              # 블록 간 행 간격 / 차트 정사각 한 변(cm)
+    tan = PatternFill("solid", fgColor="DED9C4")   # 베이지 제목 막대
+
+    def axis_gray(ax, size=900):
+        cp = CharacterProperties(solidFill="BFBFBF", sz=size)
+        ax.txPr = RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
 
     def band(row, text):
-        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=12)
+        # 제목 막대 폭을 차트 폭(F~K)에 맞춤
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=11)
+        ws.row_dimensions[row].height = 22
+        for col in range(6, 12):
+            cell = ws.cell(row=row, column=col)
+            cell.fill = tan; cell.border = S["border"]
         c = ws.cell(row=row, column=6, value=text)
         c.font = S["Font"](bold=True, size=12); c.alignment = S["center"]
 
-    # 1) 도메인 평균점수 (2-2 영역점수 셀 참조 → 자동반영)
-    band(2, "항목별 양호 비율")
-    _header(ws, S, [(4, 2, "진단 도메인"), (4, 3, "평균 점수")])
-    for i, (d, rows, r1, r2) in enumerate(ranges):
-        r = 5 + i
-        ws.cell(row=r, column=2, value=d).alignment = S["center"]
-        c = ws.cell(row=r, column=3, value=f"={ref(f'H{r1}')}")
-        c.number_format = "0.0%"; c.alignment = S["center"]
-    _box(ws, S, 5, 2, 4 + n, 3, align=S["center"])
+    def place(chart, top_row, span_rows=19):
+        """제목 막대(F:K)와 동일한 열 범위로 차트 고정(two-cell anchor)."""
+        a = TwoCellAnchor(editAs="oneCell")
+        a._from = AnchorMarker(col=5, colOff=0, row=top_row - 1, rowOff=0)
+        a.to = AnchorMarker(col=11, colOff=0, row=top_row - 1 + span_rows, rowOff=0)
+        chart.anchor = a
+        ws.add_chart(chart)
 
-    # 2) 양호/취약/N/A (2-2 J/K/L 합계)
-    band(16, "양호 / 취약 / N/A 비율")
-    _header(ws, S, [(18, 2, "상태"), (18, 3, "개수")])
+    b0, b1, b2 = 2, 2 + STEP, 2 + 2 * STEP   # 블록 시작행: 2, 25, 48
+
+    # ── 블록1: 도메인 평균점수 (선형 방사형) ──
+    band(b0, "항목별 양호 비율")
+    h0 = b0 + 2
+    _header(ws, S, [(h0, 2, "진단 도메인"), (h0, 3, "평균 점수")])
+    for i, (d, rows, r1, r2) in enumerate(ranges):
+        r = h0 + 1 + i
+        ws.cell(row=r, column=2, value=d).alignment = S["center"]
+        vc = ws.cell(row=r, column=3, value=f"={ref(f'H{r1}')}")
+        vc.number_format = "0.0%"; vc.alignment = S["center"]
+    _box(ws, S, h0 + 1, 2, h0 + n, 3, align=S["center"])
+    radar = RadarChart(); radar.type = "standard"
+    radar.height = radar.width = SIDE
+    radar.add_data(Reference(ws, min_col=3, min_row=h0, max_row=h0 + n), titles_from_data=True)
+    radar.set_categories(Reference(ws, min_col=2, min_row=h0 + 1, max_row=h0 + n))
+    radar.series[0].graphicalProperties = GraphicalProperties()
+    radar.series[0].graphicalProperties.line = LineProperties(solidFill="4472C4", w=28575)
+    radar.x_axis.delete = False
+    radar.y_axis.delete = False
+    radar.y_axis.scaling.min = 0; radar.y_axis.scaling.max = 1
+    radar.y_axis.majorUnit = 0.2; radar.y_axis.numFmt = "0%"
+    axis_gray(radar.y_axis)
+    radar.legend = None
+    place(radar, b0 + 2)
+
+    # ── 블록2: 양호/취약/N/A (원형) ──
+    band(b1, "양호 / 취약 / N/A 비율")
+    h1 = b1 + 2
+    _header(ws, S, [(h1, 2, "상태"), (h1, 3, "개수")])
     for i, (lab, col) in enumerate([("양호", "J"), ("취약", "K"), ("N/A", "L")]):
-        r = 19 + i
+        r = h1 + 1 + i
         ws.cell(row=r, column=2, value=lab).alignment = S["center"]
         ws.cell(row=r, column=3, value=f"=SUM({ref(f'{col}{ds}:{col}{de}')})").alignment = S["center"]
-    _box(ws, S, 19, 2, 21, 3, align=S["center"])
+    _box(ws, S, h1 + 1, 2, h1 + 3, 3, align=S["center"])
+    pie = PieChart(); pie.varyColors = True
+    pie.height = pie.width = SIDE
+    pie.add_data(Reference(ws, min_col=3, min_row=h1, max_row=h1 + 3), titles_from_data=True)
+    pie.set_categories(Reference(ws, min_col=2, min_row=h1 + 1, max_row=h1 + 3))
+    pie.legend.position = "b"
+    pie.layout = Layout(manualLayout=ManualLayout(xMode="edge", yMode="edge",
+                                                  x=0.22, y=0.06, w=0.56, h=0.72))
+    place(pie, b1 + 2)
 
-    # 3) 영역별 취약 수 (분류별 K 합계)
-    band(29, "영역별 취약 수")
-    _header(ws, S, [(31, 2, "영역"), (31, 3, "취약 수")])
+    # ── 블록3: 영역별 취약 수 (막대) ──
+    band(b2, "영역별 취약 수")
+    h2 = b2 + 2
+    _header(ws, S, [(h2, 2, "영역"), (h2, 3, "취약 수")])
     for i, (d, rows, r1, r2) in enumerate(ranges):
-        r = 32 + i
+        r = h2 + 1 + i
         ws.cell(row=r, column=2, value=d).alignment = S["center"]
         ws.cell(row=r, column=3, value=f"=SUM({ref(f'K{r1}:K{r2}')})").alignment = S["center"]
-    _box(ws, S, 32, 2, 31 + n, 3, align=S["center"])
-
-    # 차트1: 도메인 평균점수
-    #  - 분류 3개 이상 → 방사형(원본과 동일). 2개 이하면 레이더가 직선으로 찌그러지므로 막대로 대체.
-    score_data = Reference(ws, min_col=3, min_row=4, max_row=4 + n)
-    score_cats = Reference(ws, min_col=2, min_row=5, max_row=4 + n)
-    if n >= 3:
-        c1 = RadarChart(); c1.type = "marker"; c1.style = 2
-    else:
-        c1 = BarChart(); c1.type = "col"; c1.grouping = "clustered"
-    c1.height, c1.width = 8, 13
-    c1.varyColors = True
-    c1.add_data(score_data, titles_from_data=True)
-    c1.set_categories(score_cats)
-    c1.legend = None
-    ws.add_chart(c1, "F3")
-
-    pie = PieChart(); pie.varyColors = True
-    pie.height, pie.width = 7, 11
-    pie.add_data(Reference(ws, min_col=3, min_row=18, max_row=21), titles_from_data=True)
-    pie.set_categories(Reference(ws, min_col=2, min_row=19, max_row=21))
-    ws.add_chart(pie, "F17")
-
+    _box(ws, S, h2 + 1, 2, h2 + n, 3, align=S["center"])
     bar = BarChart(); bar.type = "col"; bar.grouping = "clustered"; bar.varyColors = True
-    bar.height, bar.width, bar.legend = 7, 13, None
-    bar.add_data(Reference(ws, min_col=3, min_row=31, max_row=31 + n), titles_from_data=True)
-    bar.set_categories(Reference(ws, min_col=2, min_row=32, max_row=31 + n))
-    ws.add_chart(bar, "F31")
+    bar.height = bar.width = SIDE
+    bar.add_data(Reference(ws, min_col=3, min_row=h2, max_row=h2 + n), titles_from_data=True)
+    bar.set_categories(Reference(ws, min_col=2, min_row=h2 + 1, max_row=h2 + n))
+    bar.x_axis.delete = False
+    bar.y_axis.delete = False
+    bar.legend = None
+    place(bar, b2 + 2)
+
+
 def _sheet_summary(ws, S, ctx):
     counts, ranges = ctx["counts"], ctx["ranges"]
     ds, de, footer = ctx["ds"], ctx["de"], ctx["footer"]

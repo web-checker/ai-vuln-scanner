@@ -1,7 +1,7 @@
 // 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 전이 상태 비교.
 import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, RUN_KINDS, Pager } from './ui.jsx'
+import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, Pager } from './ui.jsx'
 
 const PAGE_SIZE = 10   // 한 페이지에 보이는 행 수(초과 시 번호식 페이지로 분할)
 
@@ -33,14 +33,6 @@ export default function CompareTab() {
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
-
-  async function changeKind(r, kind) {
-    if (r.kind === kind) return
-    try {
-      await api.setRunKind(r.run_id, kind)
-      setRuns((rs) => rs.map((x) => x.run_id === r.run_id ? { ...x, kind } : x))
-    } catch (e) { setErr(String(e.message || e)) }
-  }
 
   async function onSaveReport() {
     if (saving || !base || !target) return
@@ -141,28 +133,6 @@ export default function CompareTab() {
             disabled={runs.length < 2} onClick={runCompare}>⇄ 비교</button>
         </div>
         {assetId && runs.length < 2 && <div className="hint" style={{ padding: '0 22px 16px' }}>※ 비교하려면 이 진단 대상에 진단 실행이 2개 이상 필요합니다.</div>}
-        {runs.length > 0 && (() => {
-          const kindPageCount = Math.max(1, Math.ceil(runs.length / PAGE_SIZE))
-          const curKindPage = Math.min(kindPage, kindPageCount - 1)
-          const pagedRuns = runs.slice(curKindPage * PAGE_SIZE, curKindPage * PAGE_SIZE + PAGE_SIZE)
-          return (
-          <div className="kind-editor" style={{ padding: '0 22px 18px' }}>
-            <div className="hint" style={{ marginBottom: 8 }}>진단 종류 지정 — 보통 최초진단 ↔ 이행점검으로 비교합니다. (총 {runs.length}건)</div>
-            {pagedRuns.map((r) => (
-              <div className="kind-row" key={r.run_id}>
-                <span className="kind-meta">{fmtDateTime(r.at)} · {r.filename}</span>
-                <div className="kind-toggle">
-                  {RUN_KINDS.map((k) => (
-                    <button key={k} className={`sort-btn${r.kind === k ? ' on' : ''}`}
-                      onClick={() => changeKind(r, k)}>{k}</button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <Pager page={curKindPage} pageCount={kindPageCount} onChange={setKindPage} />
-          </div>
-          )
-        })()}
       </section>
 
       {cmp && (
