@@ -34,11 +34,6 @@ REPORT_META = {
 TARGET_DEFAULTS = {"버전정보": "-", "용도": "", "비고": "-"}
 
 
-def _label_reason(result: str, reason: str) -> str:
-    """판단근거 본문만 반환. 결과(양호/취약)는 '결과' 열에 이미 표기되므로 머리말은 붙이지 않는다."""
-    return (reason or "").strip()
-
-
 def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: bool) -> dict:
     """원본 CSV / Run CSV 공통 메타 컬럼 + 파생 판정값으로 보고서 행(REPORT_COLUMNS) 생성.
 
@@ -53,7 +48,7 @@ def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: 
         "항목": row.get("항목", ""),
         "판단기준": _crit_lines(row.get("판단기준", "")),
         "결과": result,
-        "판단근거": _label_reason(result, reason),
+        "판단근거": (reason or "").strip(),   # 결과 라벨은 '결과' 열에 있으므로 본문만
         "조치방법": remediation if show_remed else "",
         "진단대상": row.get("진단대상", ""),
         "진단대상IP": row.get("진단대상IP", ""),
@@ -152,6 +147,11 @@ def build_report_df_from_run(run_df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ── 최종 보고서(최초진단 base ↔ 이행점검 target 병합) ──────────────
+def _union_codes(bmap: dict, tmap: dict) -> list[str]:
+    """base 코드(등장순) + target 에만 있는 코드(등장순) 합집합. dict 삽입순 보존."""
+    return list(bmap.keys()) + [c for c in tmap if c not in bmap]
+
+
 def build_final_report_rows(base_df: pd.DataFrame, target_df: pd.DataFrame) -> list[dict]:
     """두 Run을 항목코드로 병합 → 최종 보고서 표 행(UI용).
 
@@ -159,18 +159,21 @@ def build_final_report_rows(base_df: pd.DataFrame, target_df: pd.DataFrame) -> l
     """
     brdf = build_report_df_from_run(base_df)
     trdf = build_report_df_from_run(target_df)
+    bmap = {str(r["항목코드"]): r for _, r in brdf.iterrows()}
     tmap = {str(r["항목코드"]): r for _, r in trdf.iterrows()}
     out = []
-    for _, b in brdf.iterrows():
-        code = str(b["항목코드"])
-        t = tmap.get(code)
+    # base·target 코드 합집합(이행점검에서 새로 추가된 항목 누락 방지). 등장순 = base 먼저.
+    for code in _union_codes(bmap, tmap):
+        b, t = bmap.get(code), tmap.get(code)
+        meta = b if b is not None else t   # 메타(분류/항목 등)는 있는 쪽에서
         out.append({
-            "code": code, "group": b["분류"], "severity": b["중요도"], "name": b["항목"],
-            "criteria": b["판단기준"],
-            "firstResult": b["결과"], "firstReason": b["판단근거"],
+            "code": code, "group": meta["분류"], "severity": meta["중요도"], "name": meta["항목"],
+            "criteria": meta["판단기준"],
+            "firstResult": (b["결과"] if b is not None else ""),
+            "firstReason": (b["판단근거"] if b is not None else ""),
             "finalResult": (t["결과"] if t is not None else ""),
             "finalReason": (t["판단근거"] if t is not None else ""),
-            "target": b["진단대상"], "ip": b["진단대상IP"],
+            "target": meta["진단대상"], "ip": meta["진단대상IP"],
         })
     return out
 
@@ -185,6 +188,8 @@ def build_final_xlsx(base_df: pd.DataFrame, target_df: pd.DataFrame) -> bytes:
     trdf = build_report_df_from_run(target_df)    # 이행점검(최종) → 요약/그래프 기준
     base_map = {str(r["항목코드"]): {"result": r["결과"], "reason": r["판단근거"]}
                 for _, r in brdf.iterrows()}
+    # 주: 시트는 target(trdf) 행 기준 — 요약/그래프가 '최종' 기준이라 의도된 동작.
+    #     (base 에만 있고 target 에 없는 항목은 표기 안 됨. 보통 같은 체크리스트 재점검이라 무관.)
     wb = _build_workbook(trdf, compare_map=base_map)
     buf = io.BytesIO()
     wb.save(buf)
@@ -686,7 +691,10 @@ def _sheet_graph(ws, S, ctx):
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2, "B": 16, "C": 11})
     n = len(groups)
-    STEP, SIDE = 23, 10              # 블록 간 행 간격 / 차트 정사각 한 변(cm)
+    # 블록 간 행 간격 — 기본 23(차트 span 19 + 여유)이되, 분류 수 n 이 많으면
+    # 도메인 표(b+3 ~ b+2+n)가 다음 블록을 덮지 않도록 n 기반으로 늘린다.
+    SIDE = 10                        # 차트 정사각 한 변(cm)
+    STEP = max(23, n + 4)            # 모든 블록 좌표(b0/b1/b2)가 이 값에서 파생됨
     tan = PatternFill("solid", fgColor="DED9C4")   # 베이지 제목 막대
 
     def axis_gray(ax, size=900):

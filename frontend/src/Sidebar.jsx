@@ -1,7 +1,7 @@
 // 좌측 사이드바(네이비): 메뉴 + CSV 업로드 + 진단 실행.
 // 자산 트리/하위목록은 제거 — 자산 목록은 가운데 "자산 관리" 탭에서만 본다.
 import React, { useRef, useState } from 'react'
-import { RUN_KINDS } from './ui.jsx'
+import { RUN_KINDS, REPORT_FIRST, REPORT_FINAL } from './ui.jsx'
 
 export default function Sidebar({ open, tab, setTab, health, session, total, doneCount, onUpload, onJudge, onReset, judging, runKind, setRunKind, reportKind, setReportKind, onCancelJudge, cancelling, assetSaved, onSaveAsset }) {
   const [drag, setDrag] = useState(false)
@@ -28,12 +28,12 @@ export default function Sidebar({ open, tab, setTab, health, session, total, don
         </button>
         {reportOpen && (
           <div className="nav-tree">
-            <button className={`tree-row${tab === 'report' && reportKind === 'first' ? ' sel' : ''}`}
-              onClick={() => { setTab('report'); setReportKind?.('first') }}>
+            <button className={`tree-row${tab === 'report' && reportKind === REPORT_FIRST ? ' sel' : ''}`}
+              onClick={() => { setTab('report'); setReportKind?.(REPORT_FIRST) }}>
               📄 <span className="tree-label">최초 보고서</span>
             </button>
-            <button className={`tree-row${tab === 'report' && reportKind === 'final' ? ' sel' : ''}`}
-              onClick={() => { setTab('report'); setReportKind?.('final') }}>
+            <button className={`tree-row${tab === 'report' && reportKind === REPORT_FINAL ? ' sel' : ''}`}
+              onClick={() => { setTab('report'); setReportKind?.(REPORT_FINAL) }}>
               📄 <span className="tree-label">최종 보고서</span>
             </button>
           </div>

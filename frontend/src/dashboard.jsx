@@ -21,7 +21,7 @@ export function useReportSort(items) {
     else r = String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
     return sortDir === 'asc' ? r : -r
   }), [items, sortKey, sortDir])
-  return { sortKey, sortDir, toggleSort, sortArrow, reportRows }
+  return { sortKey, toggleSort, sortArrow, reportRows }
 }
 
 // 정렬 버튼 2개(항목코드/중요도) — useReportSort 의 값을 그대로 받는다.

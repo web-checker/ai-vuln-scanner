@@ -386,12 +386,13 @@ def compare(base_run_id: str, target_run_id: str) -> dict:
                 "분류": r.get("분류", ""), "항목": r.get("항목", ""), "중요도": r.get("중요도", ""),
             }
 
-    codes = sorted(set(bfin) | set(tfin), key=lambda c: (c is None, c))
+    codes = sorted(set(bfin) | set(tfin))   # 항목코드는 항상 str — 빈값은 자연히 앞으로
     rows = []
     counts = {config.C_IMPROVED: 0, config.C_UNFIXED: 0, config.C_WORSENED: 0,
               config.C_KEPT: 0, config.C_NA: 0}
     for code in codes:
-        b, t = bfin.get(code, ""), tfin.get(code, "")
+        # 양쪽 공백 제거 — 보고서 pill 색상 매칭("취약 "→na 오표기) 방지
+        b, t = (bfin.get(code, "") or "").strip(), (tfin.get(code, "") or "").strip()
         st = _status(b, t)
         counts[st] += 1
         m = meta.get(code, {})

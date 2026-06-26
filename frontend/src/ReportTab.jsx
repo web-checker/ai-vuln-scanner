@@ -1,7 +1,7 @@
 // 보고서 탭: 최초 보고서(파일 선택) / 최종 보고서(최초진단 ↔ 이행점검 2파일 비교).
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { Pill, formatCriteria, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP } from './ui.jsx'
+import { Pill, formatCriteria, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, REPORT_FINAL } from './ui.jsx'
 import { useReportSort, ReportSortButtons, ReportTable } from './dashboard.jsx'
 
 // 최종 보고서 비교 표(최초/최종 결과·근거 + 진단대상)
@@ -38,6 +38,9 @@ function FinalReportTable({ rows }) {
 }
 
 export default function ReportTab({ reportKind, session, sessionItems }) {
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])  // 언마운트 후 async setState 차단
+
   const [assets, setAssets] = useState([])
   const [err, setErr] = useState('')
 
@@ -54,44 +57,55 @@ export default function ReportTab({ reportKind, session, sessionItems }) {
   const [target, setTarget] = useState('')
   const [finalRows, setFinalRows] = useState(null)
 
-  useEffect(() => { api.getAssets().then((r) => setAssets(r.assets || [])).catch((e) => setErr(String(e.message || e))) }, [])
+  useEffect(() => {
+    api.getAssets()
+      .then((r) => { if (mounted.current) setAssets(r.assets || []) })
+      .catch((e) => { if (mounted.current) setErr(String(e.message || e)) })
+  }, [])
 
   // 최초 보고서 표 항목(현재 세션 또는 선택한 run) — 항상 호출(훅 순서 보존)
   const firstItems = firstRunId === 'session' ? (sessionItems || []) : (runItems || [])
   const { sortKey, toggleSort, sortArrow, reportRows } = useReportSort(firstItems)
 
   async function loadFirstAsset(aid) {
-    setFirstAsset(aid); setRunItems(null); setFirstRunId('session')
+    setErr(''); setFirstAsset(aid); setRunItems(null); setFirstRunId('session')
     if (!aid) { setFirstRuns([]); return }
-    try { const r = await api.getAssetRuns(aid); setFirstRuns((r.runs || []).filter((x) => x.kind === RUN_FIRST)) }
-    catch (e) { setErr(String(e.message || e)) }
+    try {
+      const r = await api.getAssetRuns(aid)
+      if (mounted.current) setFirstRuns((r.runs || []).filter((x) => x.kind === RUN_FIRST))
+    } catch (e) { if (mounted.current) setErr(String(e.message || e)) }
   }
   async function pickFirstRun(rid) {
-    setFirstRunId(rid)
+    setErr(''); setFirstRunId(rid)
     if (rid === 'session') { setRunItems(null); return }
-    try { const r = await api.getRun(rid); setRunItems(r.items || []) }
-    catch (e) { setErr(String(e.message || e)) }
+    try {
+      const r = await api.getRun(rid)
+      if (mounted.current) setRunItems(r.items || [])
+    } catch (e) { if (mounted.current) setErr(String(e.message || e)) }
   }
 
   async function loadFinalAsset(aid) {
-    setFinalAsset(aid); setFinalRows(null)
+    setErr(''); setFinalAsset(aid); setFinalRows(null)
     if (!aid) { setFinalRuns([]); setBase(''); setTarget(''); return }
     try {
       const r = await api.getAssetRuns(aid); const rs = r.runs || []
+      if (!mounted.current) return
       setFinalRuns(rs)
       setBase(rs.find((x) => x.kind === RUN_FIRST)?.run_id || '')
       setTarget(rs.find((x) => x.kind === RUN_FOLLOWUP)?.run_id || '')
-    } catch (e) { setErr(String(e.message || e)) }
+    } catch (e) { if (mounted.current) setErr(String(e.message || e)) }
   }
   async function runFinal() {
     if (!base || !target) { setErr('최초진단 파일과 이행점검 파일을 모두 선택하세요.'); return }
     setErr('')
-    try { const r = await api.getFinalReport(base, target); setFinalRows(r.rows || []) }
-    catch (e) { setErr(String(e.message || e)) }
+    try {
+      const r = await api.getFinalReport(base, target)
+      if (mounted.current) setFinalRows(r.rows || [])
+    } catch (e) { if (mounted.current) setErr(String(e.message || e)) }
   }
 
   // ───────── 최종 보고서 ─────────
-  if (reportKind === 'final') {
+  if (reportKind === REPORT_FINAL) {
     const firstOpts = finalRuns.filter((x) => x.kind === RUN_FIRST)
     const followOpts = finalRuns.filter((x) => x.kind === RUN_FOLLOWUP)
     return (
