@@ -1,10 +1,5 @@
 # AI 대시보드 (Developed By CHECKER)
 
-[![repo: auto-vuln-scanner](https://img.shields.io/badge/repo-auto--vuln--scanner-2ea44f?style=flat-square)](https://github.com/web-checker/auto-vuln-scanner)
-[![mode: READ-ONLY](https://img.shields.io/badge/mode-READ--ONLY-blue?style=flat-square)](#개요)
-[![shell: bash + PowerShell](https://img.shields.io/badge/shell-bash%20%2B%20PowerShell-89e051?style=flat-square)](#진단-영역--대상-호스트)
-[![purpose: educational](https://img.shields.io/badge/purpose-educational-lightgrey?style=flat-square)](#라이선스--용도)
-
 해당 대시보드는 KISA 주요정보통신기반시설 기술적 취약점 분석·평가, 클라우드 보안가이드(AWS) 자동진단 결과 CSV를 기반으로, AI 재판정과 자동화 스크립트 판정 교차검증을 수행하는 보안진단 대시보드입니다.
 
 자동진단 스크립트가 생성한 로우데이터 CSV를 업로드하면 AI Agent가 주요정보통신기반시설 기술적 취약점 분석·평가 상세가이드, 클라우드 보안가이드(AWS) PDF와 필요 시 웹 검색을 참고하여 항목별 양호 / 취약 / N/A를 다시 판단합니다. 이후 자동화 스크립트 자체 판정과 AI 판정을 비교하여 불일치 항목을 확인하고, 최종 검토 결과를 Excel 보고서로 생성합니다.
@@ -303,7 +298,7 @@ ai-vuln-scanner/
 │   ├── 01_Unix*.pdf
 │   ├── 02_Windows*.pdf
 │   ├── 03_웹_서비스*.pdf
-│   └── 08_DBMS*.pdf
+│   ├── 08_DBMS*.pdf
 |   └── 클라우드 보안 가이드_AWS.pdf
 │
 ├── run-app.bat                  # 운영 실행
