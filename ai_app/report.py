@@ -835,7 +835,8 @@ def _sheet_summary(ws, S, ctx):
         for k, row in enumerate(rows):
             r = r1 + k
             res = str(row.get("결과"))
-            ws.cell(row=r, column=3, value=row.get("항목코드"))
+            cc = ws.cell(row=r, column=3, value=str(row.get("항목코드") or ""))
+            cc.number_format = "@"   # 항목코드 텍스트 고정(4.10→4.1 숫자 붕괴 방지)
             ws.cell(row=r, column=4, value=row.get("항목"))
             ws.cell(row=r, column=5, value=row.get("중요도"))
             rc = ws.cell(row=r, column=6, value=res)
@@ -904,7 +905,8 @@ def _sheet_detail(ws, S, ctx):
     for d, rows, r1, r2 in ranges:
         for k, row in enumerate(rows):
             r = r1 + k
-            ws.cell(row=r, column=3, value=row.get("항목코드"))
+            cc = ws.cell(row=r, column=3, value=str(row.get("항목코드") or ""))
+            cc.number_format = "@"   # 항목코드 텍스트 고정(4.10→4.1 숫자 붕괴 방지)
             ws.cell(row=r, column=4, value=row.get("항목"))
             ws.cell(row=r, column=5, value=_crit_lines(row.get("판단기준")))   # '|' → 줄바꿈
             if is_final:
