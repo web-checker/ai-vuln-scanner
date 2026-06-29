@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from './api.js'
-import { MoonIcon, Pill, prefResult } from './ui.jsx'
+import { MoonIcon, Pill, prefResult, REPORT_FIRST, REPORT_FINAL } from './ui.jsx'
 import { SummaryCharts } from './dashboard.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
@@ -29,7 +29,7 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true)
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
   const [runKind, setRunKind] = useState('최초진단')  // 업로드 시 진단 종류(사이드바에서 선택)
-  const [reportKind, setReportKind] = useState('first')  // 보고서 하위탭: 'first'(최초) | 'final'(최종)
+  const [reportKind, setReportKind] = useState(REPORT_FIRST)  // 보고서 하위탭(최초/최종)
   const [assetTarget, setAssetTarget] = useState(null)  // 사이드바 트리 → 자산관리 네비게이션 지시
   const [assetsVersion, setAssetsVersion] = useState(0) // 자산/기록 변경 시 사이드바·가운데 동기 갱신 신호
   const bumpAssets = () => setAssetsVersion((v) => v + 1)
@@ -151,13 +151,11 @@ export default function App() {
         runKind={runKind} setRunKind={setRunKind}
         reportKind={reportKind} setReportKind={setReportKind}
         onCancelJudge={onCancelJudge} cancelling={cancelling}
-        assetSaved={assetSaved} onSaveAsset={onSaveAsset}
-        onNavigateAsset={navAsset} assetTarget={assetTarget}
-        assetsVersion={assetsVersion} onAssetsChanged={bumpAssets} />
+        assetSaved={assetSaved} onSaveAsset={onSaveAsset} />
 
       <main className="main">
         <div className="topbar">
-          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? (reportKind === 'final' ? '최종 보고서' : '최초 보고서') : tab === 'assets' ? '자산관리' : '진단 결과 비교'}</div>
+          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? (reportKind === REPORT_FINAL ? '이행 점검' : '최초 진단') : tab === 'assets' ? '자산 관리' : '진단 결과 비교'}</div>
           <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : <><MoonIcon />다크</>}</button>
         </div>
 

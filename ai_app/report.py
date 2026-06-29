@@ -34,11 +34,6 @@ REPORT_META = {
 TARGET_DEFAULTS = {"버전정보": "-", "용도": "", "비고": "-"}
 
 
-def _label_reason(result: str, reason: str) -> str:
-    """판단근거 본문만 반환. 결과(양호/취약)는 '결과' 열에 이미 표기되므로 머리말은 붙이지 않는다."""
-    return (reason or "").strip()
-
-
 def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: bool) -> dict:
     """원본 CSV / Run CSV 공통 메타 컬럼 + 파생 판정값으로 보고서 행(REPORT_COLUMNS) 생성.
 
@@ -53,7 +48,7 @@ def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: 
         "항목": row.get("항목", ""),
         "판단기준": _crit_lines(row.get("판단기준", "")),
         "결과": result,
-        "판단근거": _label_reason(result, reason),
+        "판단근거": (reason or "").strip(),   # 결과 라벨은 '결과' 열에 있으므로 본문만
         "조치방법": remediation if show_remed else "",
         "진단대상": row.get("진단대상", ""),
         "진단대상IP": row.get("진단대상IP", ""),
@@ -88,9 +83,25 @@ def to_csv_bytes(report_df: pd.DataFrame) -> bytes:
 SUMMARY_SHEET = "2-2. 요약 진단결과"   # 수식 참조용 시트 이름
 
 
-def build_xlsx_from_report_df(rdf: pd.DataFrame) -> bytes:
+def _host_meta(df: pd.DataFrame) -> dict:
+    """원본/Run df에서 진단대상 시트용 메타(호스트명/버전정보)를 '첫 비어있지 않은 값'으로 추출.
+
+    스크립트가 첫 행에만 채워 보내도(중복 0) 동작한다. 컬럼이 없으면 빈 값.
+    """
+    def first(col: str) -> str:
+        if col not in df.columns:
+            return ""
+        for v in df[col]:
+            if str(v).strip():
+                return str(v).strip()
+        return ""
+    return {"hostname": first(config.CSV_HOSTNAME_COLUMN),
+            "version": first(config.CSV_VERSION_COLUMN)}
+
+
+def build_xlsx_from_report_df(rdf: pd.DataFrame, host_meta: dict | None = None) -> bytes:
     """보고서 DataFrame(REPORT_COLUMNS) → 5시트 .xlsx 바이트."""
-    wb = _build_workbook(rdf)
+    wb = _build_workbook(rdf, host_meta=host_meta)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -99,7 +110,12 @@ def build_xlsx_from_report_df(rdf: pd.DataFrame) -> bytes:
 
 def build_xlsx_report(df: pd.DataFrame, decisions: dict[str, dict]) -> bytes:
     """원본 df + 확정 판정 → 5시트 .xlsx 바이트(수식 자동계산 포함)."""
-    return build_xlsx_from_report_df(build_report_df(df, decisions))
+    return build_xlsx_from_report_df(build_report_df(df, decisions), host_meta=_host_meta(df))
+
+
+def build_xlsx_from_run(run_df: pd.DataFrame) -> bytes:
+    """저장된 Run CSV(RUN_COLUMNS) → 5시트 .xlsx(진단대상 시트 메타 포함)."""
+    return build_xlsx_from_report_df(build_report_df_from_run(run_df), host_meta=_host_meta(run_df))
 
 
 def build_compare_csv(compare_df: pd.DataFrame) -> bytes:
@@ -152,6 +168,11 @@ def build_report_df_from_run(run_df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ── 최종 보고서(최초진단 base ↔ 이행점검 target 병합) ──────────────
+def _union_codes(bmap: dict, tmap: dict) -> list[str]:
+    """base 코드(등장순) + target 에만 있는 코드(등장순) 합집합. dict 삽입순 보존."""
+    return list(bmap.keys()) + [c for c in tmap if c not in bmap]
+
+
 def build_final_report_rows(base_df: pd.DataFrame, target_df: pd.DataFrame) -> list[dict]:
     """두 Run을 항목코드로 병합 → 최종 보고서 표 행(UI용).
 
@@ -159,18 +180,21 @@ def build_final_report_rows(base_df: pd.DataFrame, target_df: pd.DataFrame) -> l
     """
     brdf = build_report_df_from_run(base_df)
     trdf = build_report_df_from_run(target_df)
+    bmap = {str(r["항목코드"]): r for _, r in brdf.iterrows()}
     tmap = {str(r["항목코드"]): r for _, r in trdf.iterrows()}
     out = []
-    for _, b in brdf.iterrows():
-        code = str(b["항목코드"])
-        t = tmap.get(code)
+    # base·target 코드 합집합(이행점검에서 새로 추가된 항목 누락 방지). 등장순 = base 먼저.
+    for code in _union_codes(bmap, tmap):
+        b, t = bmap.get(code), tmap.get(code)
+        meta = b if b is not None else t   # 메타(분류/항목 등)는 있는 쪽에서
         out.append({
-            "code": code, "group": b["분류"], "severity": b["중요도"], "name": b["항목"],
-            "criteria": b["판단기준"],
-            "firstResult": b["결과"], "firstReason": b["판단근거"],
+            "code": code, "group": meta["분류"], "severity": meta["중요도"], "name": meta["항목"],
+            "criteria": meta["판단기준"],
+            "firstResult": (b["결과"] if b is not None else ""),
+            "firstReason": (b["판단근거"] if b is not None else ""),
             "finalResult": (t["결과"] if t is not None else ""),
             "finalReason": (t["판단근거"] if t is not None else ""),
-            "target": b["진단대상"], "ip": b["진단대상IP"],
+            "target": meta["진단대상"], "ip": meta["진단대상IP"],
         })
     return out
 
@@ -185,7 +209,9 @@ def build_final_xlsx(base_df: pd.DataFrame, target_df: pd.DataFrame) -> bytes:
     trdf = build_report_df_from_run(target_df)    # 이행점검(최종) → 요약/그래프 기준
     base_map = {str(r["항목코드"]): {"result": r["결과"], "reason": r["판단근거"]}
                 for _, r in brdf.iterrows()}
-    wb = _build_workbook(trdf, compare_map=base_map)
+    # 주: 시트는 target(trdf) 행 기준 — 요약/그래프가 '최종' 기준이라 의도된 동작.
+    #     (base 에만 있고 target 에 없는 항목은 표기 안 됨. 보통 같은 체크리스트 재점검이라 무관.)
+    wb = _build_workbook(trdf, compare_map=base_map, host_meta=_host_meta(target_df))
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -598,7 +624,7 @@ def _merge_label(ws, S, r1, r2, col, value):
 def _widths(ws, mapping: dict):
     for col, w in mapping.items():
         ws.column_dimensions[col].width = w
-def _build_workbook(rdf: pd.DataFrame, compare_map: dict | None = None):
+def _build_workbook(rdf: pd.DataFrame, compare_map: dict | None = None, host_meta: dict | None = None):
     from openpyxl import Workbook
     S = _xlsx_styles()
     groups = _grouped(rdf)
@@ -607,7 +633,8 @@ def _build_workbook(rdf: pd.DataFrame, compare_map: dict | None = None):
     ranges, ds, de, footer = _ranges(groups)
     ctx = {"groups": groups, "counts": counts, "targets": targets,
            "ranges": ranges, "ds": ds, "de": de, "footer": footer,
-           "compare_map": compare_map}   # 최종 보고서: 최초진단(base) {result,reason} → 3-1 시트 8컬럼
+           "compare_map": compare_map,   # 최종 보고서: 최초진단(base) {result,reason} → 3-1 시트 8컬럼
+           "host_meta": host_meta or {}}  # 진단대상 시트: Hostname/버전정보(스크립트 수집값)
 
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True   # 열 때 수식 자동 재계산
@@ -647,6 +674,9 @@ def _sheet_cover(ws, S):
     dt.font = S["Font"](size=12); dt.alignment = S["center"]
 def _sheet_targets(ws, S, ctx):
     targets = ctx["targets"]
+    hm = ctx.get("host_meta", {})
+    hostname = hm.get("hostname", "")          # 스크립트 수집값(없으면 공란 = 수기 기입)
+    version = hm.get("version", "") or TARGET_DEFAULTS["버전정보"]
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2, "B": 6, "C": 22, "D": 16, "E": 34, "F": 12, "G": 26})
     ws.row_dimensions[1].height = 26
@@ -664,9 +694,9 @@ def _sheet_targets(ws, S, ctx):
         r = start + i
         ws.row_dimensions[r].height = 24
         ws.cell(row=r, column=2, value=i + 1)
-        ws.cell(row=r, column=3, value="")          # Hostname: 수기 기입용 공란
+        ws.cell(row=r, column=3, value=hostname)    # Hostname: 스크립트 수집값(없으면 공란 수기기입)
         ws.cell(row=r, column=4, value=t["ip"])
-        ws.cell(row=r, column=5, value=TARGET_DEFAULTS["버전정보"])
+        ws.cell(row=r, column=5, value=version)     # 버전정보: 스크립트 수집값(없으면 '-')
         ws.cell(row=r, column=6, value=TARGET_DEFAULTS["용도"])
         ws.cell(row=r, column=7, value=TARGET_DEFAULTS["비고"])
     _box(ws, S, start, 2, start + len(targets) - 1, 7, align=S["center"])
@@ -686,7 +716,10 @@ def _sheet_graph(ws, S, ctx):
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2, "B": 16, "C": 11})
     n = len(groups)
-    STEP, SIDE = 23, 10              # 블록 간 행 간격 / 차트 정사각 한 변(cm)
+    # 블록 간 행 간격 — 기본 23(차트 span 19 + 여유)이되, 분류 수 n 이 많으면
+    # 도메인 표(b+3 ~ b+2+n)가 다음 블록을 덮지 않도록 n 기반으로 늘린다.
+    SIDE = 10                        # 차트 정사각 한 변(cm)
+    STEP = max(23, n + 4)            # 모든 블록 좌표(b0/b1/b2)가 이 값에서 파생됨
     tan = PatternFill("solid", fgColor="DED9C4")   # 베이지 제목 막대
 
     def axis_gray(ax, size=900):

@@ -33,9 +33,6 @@ export const getAssetRuns = (assetId) => jfetch(`/api/assets/${encodeURIComponen
 export const deleteRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' })
 export const deleteAsset = (assetId) => jfetch(`/api/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' })
 export const getRun = (runId) => jfetch(`/api/runs/${encodeURIComponent(runId)}`)
-// 진단기록 종류(최초진단/이행점검) 변경 — 비교 탭에서 지정
-export const setRunKind = (runId, kind) =>
-  jpost(`/api/runs/${encodeURIComponent(runId)}/kind`, { kind })
 export const getCompare = (base, target) =>
   jfetch(`/api/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`)
 export const compareCsvUrl = (base, target) =>
@@ -60,19 +57,6 @@ export const getFinalReport = (base, target) =>
   jfetch(`/api/final-report?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`)
 export const finalReportXlsxUrl = (base, target) =>
   `/api/final-report.xlsx?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`
-
-// 저장된 Run의 최종 보고서를 HTML로 서버에 저장(report_id = run_id 반환)
-export const saveRunReportHtml = (runId) =>
-  jfetch(`/api/runs/${encodeURIComponent(runId)}/report/save`, { method: 'POST' })
-
-// 비교 결과를 HTML 보고서로 저장(report_id = cmp-{base}__{target})
-export const saveCompareReport = (base, target) =>
-  jfetch(`/api/compare/report/save?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`,
-    { method: 'POST' })
-
-// 저장된 보고서 URL. download=true면 첨부(파일 다운로드), 아니면 인라인 열람(새 탭).
-export const savedReportUrl = (reportId, download = false) =>
-  `/api/reports/${encodeURIComponent(reportId)}/report.html${download ? '?download=1' : ''}`
 
 // 진행 중인 AI 교차 진단 중지(다음 항목부터 토큰 사용 중단)
 export const cancelJudge = (session_id) => jpost('/api/judge/cancel', { session_id })

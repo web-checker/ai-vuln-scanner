@@ -1,7 +1,7 @@
 // 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 전이 상태 비교.
 import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, Pager } from './ui.jsx'
+import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, Pager, CMP_FILTERS } from './ui.jsx'
 
 const PAGE_SIZE = 10   // 한 페이지에 보이는 행 수(초과 시 번호식 페이지로 분할)
 
@@ -29,11 +29,10 @@ export default function CompareTab() {
   const [cmp, setCmp] = useState(null)
   const [filter, setFilter] = useState('전체')
   const [page, setPage] = useState(0)        // 비교 결과표 페이지
-  const [kindPage, setKindPage] = useState(0) // 진단 종류 지정(실행 목록) 페이지
   const [err, setErr] = useState('')
 
   const selectAsset = async (aid) => {
-    setAssetId(aid); setCmp(null); setErr(''); setKindPage(0)
+    setAssetId(aid); setCmp(null); setErr('')
     if (!aid) { setRuns([]); setBase(''); setTarget(''); return }
     try {
       const r = await api.getAssetRuns(aid)
@@ -134,8 +133,9 @@ export default function CompareTab() {
             <Kpi title="조치율" value={s.fixRate == null ? '—' : `${s.fixRate}%`} sub={`기준 취약 ${s.baseVuln ?? 0}건 기준`} accent />
           </div>
           <div className="sort-bar" style={{ padding: '8px 22px' }}>
-            {['전체', '조치 완료', '미조치', '신규 취약', '양호 유지', 'N/A'].map((f) => (
-              <button key={f} className={`sort-btn${filter === f ? ' on' : ''}`} onClick={() => { setFilter(f); setPage(0) }}>{f}</button>
+            {CMP_FILTERS.map((f) => (
+              <button key={f.value} className={`sort-btn${filter === f.value ? ' on' : ''}`}
+                onClick={() => { setFilter(f.value); setPage(0) }}>{f.label}</button>
             ))}
           </div>
           <div className="tbl-wrap">
