@@ -177,7 +177,7 @@ GUIDE_BY_PREFIX = {
     "W":   "02_Windows_서버.pdf",
     "D":   "08_DBMS.pdf",
 }
-DEFAULT_GUIDE = "03_웹_서비스.pdf"
+DEFAULT_GUIDE = "클라우드 보안 가이드_AWS.pdf"
 
 
 def guide_pdf_for_code(code: str) -> Path | None:

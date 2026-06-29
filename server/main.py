@@ -383,7 +383,7 @@ def report_xlsx(session_id: str):
     return StreamingResponse(
         io.BytesIO(data),
         media_type=_XLSX_MEDIA,
-        headers=_attachment_headers(f"was_diag_report_{label}.xlsx"),
+        headers=_attachment_headers(f"AI_initial report_{label}.xlsx"),
     )
 
 
@@ -613,7 +613,7 @@ def final_report_xlsx(base: str, target: str):
     data = report.build_final_xlsx(bdf, tdf)
     name, _ip = _first_target(bdf)
     return StreamingResponse(io.BytesIO(data), media_type=_XLSX_MEDIA,
-                             headers=_attachment_headers(f"final_report_{name or base}.xlsx"))
+                             headers=_attachment_headers(f"AI_final_report_{name or base}.xlsx"))
 
 
 # ── (프로덕션) 빌드된 프론트 정적 서빙: frontend/dist 가 있을 때만 ──
