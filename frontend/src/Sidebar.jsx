@@ -69,7 +69,7 @@ export default function Sidebar({ open, tab, setTab, health, session, total, don
         <div className="filechip">
           <div className="fi">📄</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="fn">{session.filename}</div>
+            <div className="fn" title={session.filename}>{session.filename}</div>
             <div className="fm">완료 {doneCount} / {total}건</div>
           </div>
         </div>
