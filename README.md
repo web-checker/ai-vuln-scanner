@@ -311,7 +311,6 @@ ai-vuln-scanner/
 │   ├── 02_Windows*.pdf
 │   ├── 03_웹_서비스*.pdf
 │   └── 08_DBMS*.pdf
-|   └── 10_Web_Application_웹.pdf
 |   └── 클라우드 보안 가이드_AWS.pdf
 │
 ├── run-app.bat                  # 운영 실행
