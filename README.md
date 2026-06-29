@@ -1,4 +1,4 @@
-# AI 대시보드 (Developed by CHECKER)
+# AI 대시보드 (Developed By CHECKER)
 
 해당 대시보드는 KISA 주요정보통신기반시설 기술적 취약점 분석·평가 자동진단 결과 CSV를 기반으로, AI 재판정과 자동화 스크립트 판정 교차검증을 수행하는 보안진단 대시보드입니다.
 
