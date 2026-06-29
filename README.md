@@ -321,7 +321,7 @@ ai-vuln-scanner/
 | React / Vite    | 대시보드 프론트엔드           |
 | FastAPI         | 백엔드 API 서버            |
 | Claude CLI      | AI 판정 수행             |
-| pypdf           | 주요정보통신기반시설 기술적 취약점 분석·평가 상세가이드 PDF 텍스트 추출  |
+| pypdf           | 가이드 PDF 텍스트 추출  |
 | Local CSV Store | 자산 및 진단 이력 로컬 CSV 저장 |
 | Excel Report    | 최초 보고서 및 최종 비교 보고서 생성 |
 
