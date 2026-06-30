@@ -195,14 +195,14 @@ export default function App() {
               <div className="master">
                 <div>
                   <input className="search" placeholder="코드 또는 항목명 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
-                  <div className="lhead">
-                    <span className="lh-item">항목코드 · 항목명</span>
-                    <span className="lh-cols">
-                      <span className="lh-col">스크립트</span>
-                      <span className="lh-col">AI</span>
-                    </span>
-                  </div>
                   <div className="list">
+                    <div className="lhead">
+                      <span className="lh-item">항목코드 · 항목명</span>
+                      <span className="lh-cols">
+                        <span className="lh-col">스크립트</span>
+                        <span className="lh-col">AI</span>
+                      </span>
+                    </div>
                     {shown.length === 0 && <div className="detail-empty">검색 결과가 없습니다</div>}
                     {shown.map((it) => (
                       <button key={it.code} className={`lrow${it.code === selected ? ' sel' : ''}`} onClick={() => setSelected(it.code)}>

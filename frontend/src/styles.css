@@ -226,7 +226,11 @@ button { font-family: var(--font); }
 .search { width: 100%; padding: 12px 14px; border-radius: 11px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font-size: 14px; font-family: var(--font); margin-bottom: 12px; outline: none; }
 .search:focus { border-color: var(--brand); }
-.lhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 2px 20px 9px 16px; }
+/* 스크롤 영역(.list) 안의 sticky 헤더 — 행과 같은 폭을 써서 칩과 정렬됨.
+   안쪽 여백을 .lrow(테두리1px+padding16px=17px)와 동일하게 맞춰 라벨이 칩 위에 옴 */
+.lhead { position: sticky; top: 0; z-index: 2; background: var(--card);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 17px 9px 17px; }
+:root[data-theme="dark"] .lhead { background: #0f1830; }
 .lh-item { font-size: 11.5px; font-weight: 800; color: var(--mute); letter-spacing: 0.01em; }
 .lh-cols { display: flex; gap: 6px; flex-shrink: 0; }
 .lh-col { width: 48px; text-align: center; font-size: 11.5px; font-weight: 800; color: var(--mute); }
