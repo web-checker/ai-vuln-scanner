@@ -777,12 +777,11 @@ def _sheet_graph(ws, S, ctx):
         chart.series[0].graphicalProperties.line = LineProperties(solidFill="4472C4", w=28575)
     else:
         chart = BarChart(); chart.type = "col"; chart.grouping = "clustered"
-        chart.gapWidth = 400                       # 막대 얇게(부피감↓)
+        chart.gapWidth = 500                       # 막대 최대한 얇게(부피감↓)
         chart.height = chart.width = SIDE
         chart.add_data(Reference(ws, min_col=3, min_row=h0, max_row=h0 + n), titles_from_data=True)
         chart.set_categories(Reference(ws, min_col=2, min_row=h0 + 1, max_row=h0 + n))
-        gp = GraphicalProperties(); gp.noFill = True             # 채움 없는 속 빈 막대
-        gp.line = LineProperties(solidFill="4472C4", w=19050)    # 방사형과 같은 파랑 얇은 윤곽
+        gp = GraphicalProperties(); gp.solidFill = "A6A6A6"      # 무채색(회색) 채움
         chart.series[0].graphicalProperties = gp
     chart.x_axis.delete = False
     chart.y_axis.delete = False
