@@ -28,15 +28,10 @@ REPORT_META = {
     "보안등급": "Confidential",
     "Ver": "ver 1.0",
     "제목": 'Check방 취약점 진단',
-    "부제": "서버 취약점 진단 상세결과",
+    "부제": "취약점 진단 상세결과",
 }
-# 진단대상 시트에서 CSV에 없는 칸의 기본값
-TARGET_DEFAULTS = {"버전정보": "-", "용도": "서버", "비고": "-"}
-
-
-def _label_reason(result: str, reason: str) -> str:
-    """판단근거 본문만 반환. 결과(양호/취약)는 '결과' 열에 이미 표기되므로 머리말은 붙이지 않는다."""
-    return (reason or "").strip()
+# 진단대상 시트에서 CSV에 없는 칸의 기본값(용도는 수기 기입용으로 공란)
+TARGET_DEFAULTS = {"버전정보": "-", "용도": "", "비고": "-"}
 
 
 def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: bool) -> dict:
@@ -53,7 +48,7 @@ def _report_row(row, *, result: str, reason: str, remediation: str, show_remed: 
         "항목": row.get("항목", ""),
         "판단기준": _crit_lines(row.get("판단기준", "")),
         "결과": result,
-        "판단근거": _label_reason(result, reason),
+        "판단근거": (reason or "").strip(),   # 결과 라벨은 '결과' 열에 있으므로 본문만
         "조치방법": remediation if show_remed else "",
         "진단대상": row.get("진단대상", ""),
         "진단대상IP": row.get("진단대상IP", ""),
@@ -88,9 +83,25 @@ def to_csv_bytes(report_df: pd.DataFrame) -> bytes:
 SUMMARY_SHEET = "2-2. 요약 진단결과"   # 수식 참조용 시트 이름
 
 
-def build_xlsx_from_report_df(rdf: pd.DataFrame) -> bytes:
+def _host_meta(df: pd.DataFrame) -> dict:
+    """원본/Run df에서 진단대상 시트용 메타(호스트명/버전정보)를 '첫 비어있지 않은 값'으로 추출.
+
+    스크립트가 첫 행에만 채워 보내도(중복 0) 동작한다. 컬럼이 없으면 빈 값.
+    """
+    def first(col: str) -> str:
+        if col not in df.columns:
+            return ""
+        for v in df[col]:
+            if str(v).strip():
+                return str(v).strip()
+        return ""
+    return {"hostname": first(config.CSV_HOSTNAME_COLUMN),
+            "version": first(config.CSV_VERSION_COLUMN)}
+
+
+def build_xlsx_from_report_df(rdf: pd.DataFrame, host_meta: dict | None = None) -> bytes:
     """보고서 DataFrame(REPORT_COLUMNS) → 5시트 .xlsx 바이트."""
-    wb = _build_workbook(rdf)
+    wb = _build_workbook(rdf, host_meta=host_meta)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -99,7 +110,12 @@ def build_xlsx_from_report_df(rdf: pd.DataFrame) -> bytes:
 
 def build_xlsx_report(df: pd.DataFrame, decisions: dict[str, dict]) -> bytes:
     """원본 df + 확정 판정 → 5시트 .xlsx 바이트(수식 자동계산 포함)."""
-    return build_xlsx_from_report_df(build_report_df(df, decisions))
+    return build_xlsx_from_report_df(build_report_df(df, decisions), host_meta=_host_meta(df))
+
+
+def build_xlsx_from_run(run_df: pd.DataFrame) -> bytes:
+    """저장된 Run CSV(RUN_COLUMNS) → 5시트 .xlsx(진단대상 시트 메타 포함)."""
+    return build_xlsx_from_report_df(build_report_df_from_run(run_df), host_meta=_host_meta(run_df))
 
 
 def build_compare_csv(compare_df: pd.DataFrame) -> bytes:
@@ -116,22 +132,90 @@ def _esc(text) -> str:
     return _html.escape(str(text or "")).replace("\n", "<br>")
 
 
+def _guide_remediation(code: str) -> str:
+    """가이드 PDF의 '조치 방법' 절 자동추출(저장값 없을 때 폴백). 실패 시 ''."""
+    try:
+        from . import guide_index
+        path = config.guide_pdf_for_code(code)
+        if path is None:
+            return ""
+        txt = guide_index.remediation_section(str(path), code)
+        return f"[가이드 권고]\n{txt}" if txt else ""
+    except Exception:  # noqa: BLE001  (PDF 파싱 실패 무시)
+        return ""
+
+
 def build_report_df_from_run(run_df: pd.DataFrame) -> pd.DataFrame:
     """저장된 Run CSV(RUN_COLUMNS) → 보고서 DataFrame(REPORT_COLUMNS).
 
     최종결과=확정값 우선·없으면 스크립트결과, 근거=확정근거 우선·없으면 AI근거.
-    스크립트/AI 중 하나라도 취약이면 조치방법 표기(보고서/엑셀 규칙과 동일).
+    스크립트/AI 중 하나라도 취약이면 조치방법 표기. 저장된 조치방법이 비었으면
+    주통기 가이드 PDF의 '조치 방법' 절을 자동 추출해 채운다.
     """
     rows = []
     for _, r in run_df.iterrows():
         script, ai = r.get("스크립트결과", ""), r.get("AI결과", "")
         result = config.final_result(r.get("확정결과", ""), script)
         reason = r.get("확정근거", "") or r.get("AI근거", "")
+        vuln = config.R_VULN in (script, ai)
+        remediation = r.get("조치방법", "")
+        if vuln and not str(remediation).strip():
+            remediation = _guide_remediation(str(r.get("항목코드", "")))
         rows.append(_report_row(
             r, result=result, reason=reason,
-            remediation=r.get("조치방법", ""),
-            show_remed=config.R_VULN in (script, ai)))
+            remediation=remediation, show_remed=vuln))
     return pd.DataFrame(rows, columns=config.REPORT_COLUMNS)
+
+
+# ── 최종 보고서(최초진단 base ↔ 이행점검 target 병합) ──────────────
+def _union_codes(bmap: dict, tmap: dict) -> list[str]:
+    """base 코드(등장순) + target 에만 있는 코드(등장순) 합집합. dict 삽입순 보존."""
+    return list(bmap.keys()) + [c for c in tmap if c not in bmap]
+
+
+def build_final_report_rows(base_df: pd.DataFrame, target_df: pd.DataFrame) -> list[dict]:
+    """두 Run을 항목코드로 병합 → 최종 보고서 표 행(UI용).
+
+    최초결과/최초근거 = base(최초진단), 최종결과/최종근거 = target(이행점검).
+    """
+    brdf = build_report_df_from_run(base_df)
+    trdf = build_report_df_from_run(target_df)
+    bmap = {str(r["항목코드"]): r for _, r in brdf.iterrows()}
+    tmap = {str(r["항목코드"]): r for _, r in trdf.iterrows()}
+    out = []
+    # base·target 코드 합집합(이행점검에서 새로 추가된 항목 누락 방지). 등장순 = base 먼저.
+    for code in _union_codes(bmap, tmap):
+        b, t = bmap.get(code), tmap.get(code)
+        meta = b if b is not None else t   # 메타(분류/항목 등)는 있는 쪽에서
+        out.append({
+            "code": code, "group": meta["분류"], "severity": meta["중요도"], "name": meta["항목"],
+            "criteria": meta["판단기준"],
+            "firstResult": (b["결과"] if b is not None else ""),
+            "firstReason": (b["판단근거"] if b is not None else ""),
+            "finalResult": (t["결과"] if t is not None else ""),
+            "finalReason": (t["판단근거"] if t is not None else ""),
+            "target": meta["진단대상"], "ip": meta["진단대상IP"],
+        })
+    return out
+
+
+def build_final_xlsx(base_df: pd.DataFrame, target_df: pd.DataFrame) -> bytes:
+    """최종 보고서 5시트 xlsx.
+
+    요약/그래프(0·1·2-1·2-2)는 '최종'(이행점검=target) 결과 기준으로 집계되고,
+    3-1 진단 결과 시트만 최초(base)·최종(target) 결과·근거를 8컬럼으로 함께 보인다.
+    """
+    brdf = build_report_df_from_run(base_df)      # 최초진단
+    trdf = build_report_df_from_run(target_df)    # 이행점검(최종) → 요약/그래프 기준
+    base_map = {str(r["항목코드"]): {"result": r["결과"], "reason": r["판단근거"]}
+                for _, r in brdf.iterrows()}
+    # 주: 시트는 target(trdf) 행 기준 — 요약/그래프가 '최종' 기준이라 의도된 동작.
+    #     (base 에만 있고 target 에 없는 항목은 표기 안 됨. 보통 같은 체크리스트 재점검이라 무관.)
+    wb = _build_workbook(trdf, compare_map=base_map, host_meta=_host_meta(target_df))
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 def build_html_report(df: pd.DataFrame, decisions: dict[str, dict],
@@ -540,7 +624,7 @@ def _merge_label(ws, S, r1, r2, col, value):
 def _widths(ws, mapping: dict):
     for col, w in mapping.items():
         ws.column_dimensions[col].width = w
-def _build_workbook(rdf: pd.DataFrame):
+def _build_workbook(rdf: pd.DataFrame, compare_map: dict | None = None, host_meta: dict | None = None):
     from openpyxl import Workbook
     S = _xlsx_styles()
     groups = _grouped(rdf)
@@ -548,7 +632,9 @@ def _build_workbook(rdf: pd.DataFrame):
     targets = _targets(rdf)
     ranges, ds, de, footer = _ranges(groups)
     ctx = {"groups": groups, "counts": counts, "targets": targets,
-           "ranges": ranges, "ds": ds, "de": de, "footer": footer}
+           "ranges": ranges, "ds": ds, "de": de, "footer": footer,
+           "compare_map": compare_map,   # 최종 보고서: 최초진단(base) {result,reason} → 3-1 시트 8컬럼
+           "host_meta": host_meta or {}}  # 진단대상 시트: Hostname/버전정보(스크립트 수집값)
 
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True   # 열 때 수식 자동 재계산
@@ -598,11 +684,14 @@ def _sheet_cover(ws, S, is_followup: bool = False):
     dt.font = S["Font"](size=12); dt.alignment = S["center"]
 def _sheet_targets(ws, S, ctx):
     targets = ctx["targets"]
+    hm = ctx.get("host_meta", {})
+    hostname = hm.get("hostname", "")          # 스크립트 수집값(없으면 공란 = 수기 기입)
+    version = hm.get("version", "") or TARGET_DEFAULTS["버전정보"]
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2, "B": 6, "C": 22, "D": 16, "E": 34, "F": 12, "G": 26})
     ws.row_dimensions[1].height = 26
     ws.cell(row=1, column=2,
-            value=f"  ※ 진단 대상 리스트 - 서버 {len(targets)}대").font = S["Font"](bold=True)
+            value="  ※ 진단 대상 리스트").font = S["Font"](bold=True)
     # 헤더 (2~3행)
     _hdr_merge(ws, S, 2, 2, 3, 2, "순번")
     _hdr_merge(ws, S, 2, 3, 2, 6, "진단 대상")
@@ -615,81 +704,119 @@ def _sheet_targets(ws, S, ctx):
         r = start + i
         ws.row_dimensions[r].height = 24
         ws.cell(row=r, column=2, value=i + 1)
-        ws.cell(row=r, column=3, value=t["hostname"])
+        ws.cell(row=r, column=3, value=hostname)    # Hostname: 스크립트 수집값(없으면 공란 수기기입)
         ws.cell(row=r, column=4, value=t["ip"])
-        ws.cell(row=r, column=5, value=TARGET_DEFAULTS["버전정보"])
+        ws.cell(row=r, column=5, value=version)     # 버전정보: 스크립트 수집값(없으면 '-')
         ws.cell(row=r, column=6, value=TARGET_DEFAULTS["용도"])
         ws.cell(row=r, column=7, value=TARGET_DEFAULTS["비고"])
     _box(ws, S, start, 2, start + len(targets) - 1, 7, align=S["center"])
     _auto_width(ws, per_col={"E": (20, 40), "G": (16, 30), "C": (14, 26)})
 def _sheet_graph(ws, S, ctx):
     from openpyxl.chart import BarChart, PieChart, RadarChart, Reference
+    from openpyxl.chart.layout import Layout, ManualLayout
+    from openpyxl.chart.shapes import GraphicalProperties
+    from openpyxl.chart.text import RichText
+    from openpyxl.drawing.line import LineProperties
+    from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
+    from openpyxl.drawing.text import CharacterProperties, Paragraph, ParagraphProperties
+    from openpyxl.styles import PatternFill
     groups, ranges = ctx["groups"], ctx["ranges"]
     ds, de = ctx["ds"], ctx["de"]
     ref = lambda a: f"'{SUMMARY_SHEET}'!{a}"   # noqa: E731
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2, "B": 16, "C": 11})
     n = len(groups)
+    # 블록 간 행 간격 — 기본 23(차트 span 19 + 여유)이되, 분류 수 n 이 많으면
+    # 도메인 표(b+3 ~ b+2+n)가 다음 블록을 덮지 않도록 n 기반으로 늘린다.
+    SIDE = 10                        # 차트 정사각 한 변(cm)
+    STEP = max(23, n + 4)            # 모든 블록 좌표(b0/b1/b2)가 이 값에서 파생됨
+    tan = PatternFill("solid", fgColor="DED9C4")   # 베이지 제목 막대
+
+    def axis_gray(ax, size=900):
+        cp = CharacterProperties(solidFill="BFBFBF", sz=size)
+        ax.txPr = RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
 
     def band(row, text):
-        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=12)
+        # 제목 막대 폭을 차트 폭(F~K)에 맞춤
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=11)
+        ws.row_dimensions[row].height = 22
+        for col in range(6, 12):
+            cell = ws.cell(row=row, column=col)
+            cell.fill = tan; cell.border = S["border"]
         c = ws.cell(row=row, column=6, value=text)
         c.font = S["Font"](bold=True, size=12); c.alignment = S["center"]
 
-    # 1) 도메인 평균점수 (2-2 영역점수 셀 참조 → 자동반영)
-    band(2, "항목별 양호 비율")
-    _header(ws, S, [(4, 2, "진단 도메인"), (4, 3, "평균 점수")])
-    for i, (d, rows, r1, r2) in enumerate(ranges):
-        r = 5 + i
-        ws.cell(row=r, column=2, value=d).alignment = S["center"]
-        c = ws.cell(row=r, column=3, value=f"={ref(f'H{r1}')}")
-        c.number_format = "0.0%"; c.alignment = S["center"]
-    _box(ws, S, 5, 2, 4 + n, 3, align=S["center"])
+    def place(chart, top_row, span_rows=19):
+        """제목 막대(F:K)와 동일한 열 범위로 차트 고정(two-cell anchor)."""
+        a = TwoCellAnchor(editAs="oneCell")
+        a._from = AnchorMarker(col=5, colOff=0, row=top_row - 1, rowOff=0)
+        a.to = AnchorMarker(col=11, colOff=0, row=top_row - 1 + span_rows, rowOff=0)
+        chart.anchor = a
+        ws.add_chart(chart)
 
-    # 2) 양호/취약/N/A (2-2 J/K/L 합계)
-    band(16, "양호 / 취약 / N/A 비율")
-    _header(ws, S, [(18, 2, "상태"), (18, 3, "개수")])
+    b0, b1, b2 = 2, 2 + STEP, 2 + 2 * STEP   # 블록 시작행: 2, 25, 48
+
+    # ── 블록1: 도메인 평균점수 (선형 방사형) ──
+    band(b0, "항목별 양호 비율")
+    h0 = b0 + 2
+    _header(ws, S, [(h0, 2, "진단 도메인"), (h0, 3, "평균 점수")])
+    for i, (d, rows, r1, r2) in enumerate(ranges):
+        r = h0 + 1 + i
+        ws.cell(row=r, column=2, value=d).alignment = S["center"]
+        vc = ws.cell(row=r, column=3, value=f"={ref(f'H{r1}')}")
+        vc.number_format = "0.0%"; vc.alignment = S["center"]
+    _box(ws, S, h0 + 1, 2, h0 + n, 3, align=S["center"])
+    radar = RadarChart(); radar.type = "standard"
+    radar.height = radar.width = SIDE
+    radar.add_data(Reference(ws, min_col=3, min_row=h0, max_row=h0 + n), titles_from_data=True)
+    radar.set_categories(Reference(ws, min_col=2, min_row=h0 + 1, max_row=h0 + n))
+    radar.series[0].graphicalProperties = GraphicalProperties()
+    radar.series[0].graphicalProperties.line = LineProperties(solidFill="4472C4", w=28575)
+    radar.x_axis.delete = False
+    radar.y_axis.delete = False
+    radar.y_axis.scaling.min = 0; radar.y_axis.scaling.max = 1
+    radar.y_axis.majorUnit = 0.2; radar.y_axis.numFmt = "0%"
+    axis_gray(radar.y_axis)
+    radar.legend = None
+    place(radar, b0 + 2)
+
+    # ── 블록2: 양호/취약/N/A (원형) ──
+    band(b1, "양호 / 취약 / N/A 비율")
+    h1 = b1 + 2
+    _header(ws, S, [(h1, 2, "상태"), (h1, 3, "개수")])
     for i, (lab, col) in enumerate([("양호", "J"), ("취약", "K"), ("N/A", "L")]):
-        r = 19 + i
+        r = h1 + 1 + i
         ws.cell(row=r, column=2, value=lab).alignment = S["center"]
         ws.cell(row=r, column=3, value=f"=SUM({ref(f'{col}{ds}:{col}{de}')})").alignment = S["center"]
-    _box(ws, S, 19, 2, 21, 3, align=S["center"])
+    _box(ws, S, h1 + 1, 2, h1 + 3, 3, align=S["center"])
+    pie = PieChart(); pie.varyColors = True
+    pie.height = pie.width = SIDE
+    pie.add_data(Reference(ws, min_col=3, min_row=h1, max_row=h1 + 3), titles_from_data=True)
+    pie.set_categories(Reference(ws, min_col=2, min_row=h1 + 1, max_row=h1 + 3))
+    pie.legend.position = "b"
+    pie.layout = Layout(manualLayout=ManualLayout(xMode="edge", yMode="edge",
+                                                  x=0.22, y=0.06, w=0.56, h=0.72))
+    place(pie, b1 + 2)
 
-    # 3) 영역별 취약 수 (분류별 K 합계)
-    band(29, "영역별 취약 수")
-    _header(ws, S, [(31, 2, "영역"), (31, 3, "취약 수")])
+    # ── 블록3: 영역별 취약 수 (막대) ──
+    band(b2, "영역별 취약 수")
+    h2 = b2 + 2
+    _header(ws, S, [(h2, 2, "영역"), (h2, 3, "취약 수")])
     for i, (d, rows, r1, r2) in enumerate(ranges):
-        r = 32 + i
+        r = h2 + 1 + i
         ws.cell(row=r, column=2, value=d).alignment = S["center"]
         ws.cell(row=r, column=3, value=f"=SUM({ref(f'K{r1}:K{r2}')})").alignment = S["center"]
-    _box(ws, S, 32, 2, 31 + n, 3, align=S["center"])
-
-    # 차트1: 도메인 평균점수
-    #  - 분류 3개 이상 → 방사형(원본과 동일). 2개 이하면 레이더가 직선으로 찌그러지므로 막대로 대체.
-    score_data = Reference(ws, min_col=3, min_row=4, max_row=4 + n)
-    score_cats = Reference(ws, min_col=2, min_row=5, max_row=4 + n)
-    if n >= 3:
-        c1 = RadarChart(); c1.type = "marker"; c1.style = 2
-    else:
-        c1 = BarChart(); c1.type = "col"; c1.grouping = "clustered"
-    c1.height, c1.width = 8, 13
-    c1.varyColors = True
-    c1.add_data(score_data, titles_from_data=True)
-    c1.set_categories(score_cats)
-    c1.legend = None
-    ws.add_chart(c1, "F3")
-
-    pie = PieChart(); pie.varyColors = True
-    pie.height, pie.width = 7, 11
-    pie.add_data(Reference(ws, min_col=3, min_row=18, max_row=21), titles_from_data=True)
-    pie.set_categories(Reference(ws, min_col=2, min_row=19, max_row=21))
-    ws.add_chart(pie, "F17")
-
+    _box(ws, S, h2 + 1, 2, h2 + n, 3, align=S["center"])
     bar = BarChart(); bar.type = "col"; bar.grouping = "clustered"; bar.varyColors = True
-    bar.height, bar.width, bar.legend = 7, 13, None
-    bar.add_data(Reference(ws, min_col=3, min_row=31, max_row=31 + n), titles_from_data=True)
-    bar.set_categories(Reference(ws, min_col=2, min_row=32, max_row=31 + n))
-    ws.add_chart(bar, "F31")
+    bar.height = bar.width = SIDE
+    bar.add_data(Reference(ws, min_col=3, min_row=h2, max_row=h2 + n), titles_from_data=True)
+    bar.set_categories(Reference(ws, min_col=2, min_row=h2 + 1, max_row=h2 + n))
+    bar.x_axis.delete = False
+    bar.y_axis.delete = False
+    bar.legend = None
+    place(bar, b2 + 2)
+
+
 def _sheet_summary(ws, S, ctx):
     counts, ranges = ctx["counts"], ctx["ranges"]
     ds, de, footer = ctx["ds"], ctx["de"], ctx["footer"]
@@ -718,7 +845,8 @@ def _sheet_summary(ws, S, ctx):
         for k, row in enumerate(rows):
             r = r1 + k
             res = str(row.get("결과"))
-            ws.cell(row=r, column=3, value=row.get("항목코드"))
+            cc = ws.cell(row=r, column=3, value=str(row.get("항목코드") or ""))
+            cc.number_format = "@"   # 항목코드 텍스트 고정(4.10→4.1 숫자 붕괴 방지)
             ws.cell(row=r, column=4, value=row.get("항목"))
             ws.cell(row=r, column=5, value=row.get("중요도"))
             rc = ws.cell(row=r, column=6, value=res)
@@ -762,39 +890,63 @@ def _sheet_summary(ws, S, ctx):
     _auto_width(ws, per_col={"D": (24, 60), "B": (12, 20), "E": (10, 12)})
 def _sheet_detail(ws, S, ctx):
     counts, ranges = ctx["counts"], ctx["ranges"]
-    host = ctx["targets"][0]["hostname"]
+    compare_map = ctx.get("compare_map")   # 최종 보고서: 항목코드→{result,reason} (최초진단 base)
+    is_final = compare_map is not None
     ws.sheet_view.showGridLines = False
-    _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 44, "E": 70, "F": 10, "G": 50, "H": 50})
     ws.row_dimensions[2].height = 26
-    ws.merge_cells("B2:H2")
+    if is_final:
+        # 최종 보고서: 8컬럼 (최초/최종 결과·근거)
+        _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 40, "E": 60, "F": 11, "G": 40, "H": 11, "I": 40})
+        last = 9
+        ws.merge_cells("B2:I2")
+        headers = ["진단항목", "No.", "세부 진단항목", "진단기준",
+                   "최초진단결과", "최초 판단 근거", "최종진단결과", "최종 판단 근거"]
+    else:
+        _widths(ws, {"A": 2, "B": 14, "C": 9, "D": 44, "E": 70, "F": 10, "G": 50, "H": 50})
+        last = 8
+        ws.merge_cells("B2:H2")
+        headers = ["진단항목", "No.", "세부 진단항목", "진단기준", "진단결과", "판단 근거", "조치 방법"]
     tc = ws.cell(row=2, column=2,
                  value=f"{REPORT_META['제목']} 상세 진단결과 ({counts['total']}항목)")
     tc.font = S["Font"](bold=True, size=13); tc.alignment = S["center"]
-    # 헤더(3~5행)
-    _hdr_merge(ws, S, 3, 2, 5, 2, "진단항목")
-    _hdr_merge(ws, S, 3, 3, 5, 3, "No.")
-    _hdr_merge(ws, S, 3, 4, 5, 4, "세부 진단항목")
-    _hdr_merge(ws, S, 3, 5, 5, 5, "진단기준")
-    _hdr_merge(ws, S, 3, 6, 5, 6, "진단결과")
-    _hdr_merge(ws, S, 3, 7, 5, 7, "판단 근거")   # 비고 → 판단 근거
-    _hdr_merge(ws, S, 3, 8, 5, 8, "조치 방법")
+    # 헤더(3~5행 세로병합)
+    for ci, h in enumerate(headers, start=2):
+        _hdr_merge(ws, S, 3, ci, 5, ci, h)
     for d, rows, r1, r2 in ranges:
         for k, row in enumerate(rows):
             r = r1 + k
-            res = str(row.get("결과"))
-            ws.cell(row=r, column=3, value=row.get("항목코드"))
+            cc = ws.cell(row=r, column=3, value=str(row.get("항목코드") or ""))
+            cc.number_format = "@"   # 항목코드 텍스트 고정(4.10→4.1 숫자 붕괴 방지)
             ws.cell(row=r, column=4, value=row.get("항목"))
             ws.cell(row=r, column=5, value=_crit_lines(row.get("판단기준")))   # '|' → 줄바꿈
-            rc = ws.cell(row=r, column=6, value=res)
-            f = _result_fill(S, res)
-            if f:
-                rc.fill = f
-            ws.cell(row=r, column=7, value=row.get("판단근거"))
-            ws.cell(row=r, column=8, value=row.get("조치방법"))
-        _box(ws, S, r1, 2, r2, 8, align=S["leftc"])
+            if is_final:
+                cm = compare_map.get(str(row.get("항목코드")), {})
+                res1 = str(cm.get("result", ""))            # 최초진단(base)
+                rc1 = ws.cell(row=r, column=6, value=res1)
+                if _result_fill(S, res1):
+                    rc1.fill = _result_fill(S, res1)
+                ws.cell(row=r, column=7, value=cm.get("reason", ""))
+                res2 = str(row.get("결과"))                  # 최종(이행점검 = 이 시트 기준 rdf)
+                rc2 = ws.cell(row=r, column=8, value=res2)
+                if _result_fill(S, res2):
+                    rc2.fill = _result_fill(S, res2)
+                ws.cell(row=r, column=9, value=row.get("판단근거"))
+            else:
+                res = str(row.get("결과"))
+                rc = ws.cell(row=r, column=6, value=res)
+                if _result_fill(S, res):
+                    rc.fill = _result_fill(S, res)
+                ws.cell(row=r, column=7, value=row.get("판단근거"))
+                ws.cell(row=r, column=8, value=row.get("조치방법"))
+        _box(ws, S, r1, 2, r2, last, align=S["leftc"])
         for rr in range(r1, r2 + 1):
             ws.cell(row=rr, column=3).alignment = S["center"]   # No.
-            ws.cell(row=rr, column=6).alignment = S["center"]   # 결과
+            ws.cell(row=rr, column=6).alignment = S["center"]   # (최초)결과
+            if is_final:
+                ws.cell(row=rr, column=8).alignment = S["center"]   # 최종결과
         _merge_label(ws, S, r1, r2, 2, d)
     ws.freeze_panes = "A6"
-    _auto_width(ws, per_col={"D": (24, 48), "E": (55, 100), "G": (24, 55), "H": (24, 55), "B": (12, 18)})
+    if is_final:
+        _auto_width(ws, per_col={"D": (24, 44), "E": (45, 90), "G": (24, 50), "I": (24, 50), "B": (12, 18)})
+    else:
+        _auto_width(ws, per_col={"D": (24, 48), "E": (55, 100), "G": (24, 55), "H": (24, 55), "B": (12, 18)})

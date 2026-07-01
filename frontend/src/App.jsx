@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from './api.js'
-import { MoonIcon, Pill, prefResult } from './ui.jsx'
-import { useReportSort, ReportSortButtons, ReportTable, SummaryCharts } from './dashboard.jsx'
+import { MoonIcon, Pill, prefResult, REPORT_FIRST, REPORT_FINAL } from './ui.jsx'
+import { SummaryCharts } from './dashboard.jsx'
 import Sidebar from './Sidebar.jsx'
 import Detail from './Detail.jsx'
 import AssetManager from './AssetManager.jsx'
 import CompareTab from './CompareTab.jsx'
+import ReportTab from './ReportTab.jsx'
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function App() {
@@ -27,6 +28,8 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
   const [sideOpen, setSideOpen] = useState(true)
   const [donutMode, setDonutMode] = useState('ai')   // 'ai' | 'script'
+  const [runKind, setRunKind] = useState('최초진단')  // 업로드 시 진단 종류(사이드바에서 선택)
+  const [reportKind, setReportKind] = useState(REPORT_FIRST)  // 보고서 하위탭(최초/최종)
   const [assetTarget, setAssetTarget] = useState(null)  // 사이드바 트리 → 자산관리 네비게이션 지시
   const [assetsVersion, setAssetsVersion] = useState(0) // 자산/기록 변경 시 사이드바·가운데 동기 갱신 신호
   const bumpAssets = () => setAssetsVersion((v) => v + 1)
@@ -37,8 +40,6 @@ export default function App() {
     setTab('assets')
     setAssetTarget((t) => ({ asset, run, nonce: (t?.nonce || 0) + 1 }))
   }
-
-  const { sortKey, toggleSort, sortArrow, reportRows } = useReportSort(items)
 
   useEffect(() => { api.getHealth().then(setHealth).catch(() => setHealth({ ready: false, message: '백엔드 연결 실패', backend: '-' })) }, [])
   useEffect(() => {
@@ -55,7 +56,7 @@ export default function App() {
   async function onUpload(file) {
     setError('')
     try {
-      const res = await api.uploadCsv(file)   // 종류는 비교 탭에서 지정(기본 최초진단)
+      const res = await api.uploadCsv(file, runKind)   // 진단 종류는 사이드바에서 선택
       setSession({ id: res.session_id, filename: res.filename })
       setItems(res.items); setSummary(res.summary)
       setSelected(res.items[0]?.code ?? null)
@@ -147,14 +148,14 @@ export default function App() {
       <Sidebar open={sideOpen} tab={tab} setTab={setTab} health={health} session={session}
         total={items.length} doneCount={doneCount}
         onUpload={onUpload} onJudge={onJudge} onReset={onReset} judging={judging}
+        runKind={runKind} setRunKind={setRunKind}
+        reportKind={reportKind} setReportKind={setReportKind}
         onCancelJudge={onCancelJudge} cancelling={cancelling}
-        assetSaved={assetSaved} onSaveAsset={onSaveAsset}
-        onNavigateAsset={navAsset} assetTarget={assetTarget}
-        assetsVersion={assetsVersion} onAssetsChanged={bumpAssets} />
+        assetSaved={assetSaved} onSaveAsset={onSaveAsset} />
 
       <main className="main">
         <div className="topbar">
-          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? '최종 보고서' : tab === 'assets' ? '자산관리' : '진단 결과 비교'}</div>
+          <div className="crumb">대시보드 <span>/</span> {tab === 'summary' ? '요약 및 결과' : tab === 'report' ? (reportKind === REPORT_FINAL ? '이행 점검' : '최초 진단') : tab === 'assets' ? '자산 관리' : '진단 결과 비교'}</div>
           <button className="theme-btn" onClick={() => setDark((v) => !v)}>{dark ? '☀ 라이트' : <><MoonIcon />다크</>}</button>
         </div>
 
@@ -194,14 +195,14 @@ export default function App() {
               <div className="master">
                 <div>
                   <input className="search" placeholder="코드 또는 항목명 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
-                  <div className="lhead">
-                    <span className="lh-item">항목코드 · 항목명</span>
-                    <span className="lh-cols">
-                      <span className="lh-col">스크립트</span>
-                      <span className="lh-col">AI</span>
-                    </span>
-                  </div>
                   <div className="list">
+                    <div className="lhead">
+                      <span className="lh-item">항목코드 · 항목명</span>
+                      <span className="lh-cols">
+                        <span className="lh-col">스크립트</span>
+                        <span className="lh-col">AI</span>
+                      </span>
+                    </div>
                     {shown.length === 0 && <div className="detail-empty">검색 결과가 없습니다</div>}
                     {shown.map((it) => (
                       <button key={it.code} className={`lrow${it.code === selected ? ' sel' : ''}`} onClick={() => setSelected(it.code)}>
@@ -225,24 +226,7 @@ export default function App() {
             </section>
           </>
         ) : (
-          <section className="card">
-            <div className="card-head">
-              <div className="card-ico" style={{ background: '#dcf5ec', color: '#047857' }}>📄</div>
-              <div style={{ flex: 1 }}><h2 className="card-title">최종 보고서</h2>
-                <p className="card-sub">확정 항목은 확정값, 미확정 항목은 자동화 스크립트 결과 사용</p></div>
-              <ReportSortButtons sortKey={sortKey} toggleSort={toggleSort} sortArrow={sortArrow} />
-            </div>
-            <ReportTable rows={reportRows} />
-            <div className="report-actions">
-              <a href={api.reportXlsxUrl(session.id)}>
-                <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 엑셀 다운로드 (.xlsx)</button>
-              </a>
-              <button className="btn primary" style={{ width: 'auto', padding: '13px 22px' }}
-                onClick={onSaveAsset} disabled={assetSaved}>
-                {assetSaved ? '✓ 자산 관리에 추가됨' : '🖥 자산 관리에 추가'}
-              </button>
-            </div>
-          </section>
+          <ReportTab reportKind={reportKind} session={session} sessionItems={items} />
         )}
       </main>
     </div>

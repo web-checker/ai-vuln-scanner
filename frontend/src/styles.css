@@ -58,27 +58,7 @@ button { font-family: var(--font); }
   padding: 6px 8px; border-radius: 8px; font-size: 12.5px; font-weight: 700; }
 .tree-row:hover, .tree-leaf:hover { background: var(--nav-soft); }
 .tree-row.sel, .tree-leaf.sel { background: linear-gradient(90deg, var(--brand), var(--brand2)); color: #fff; }
-.tree-twist { font-size: 11px; opacity: 0.85; width: 16px; height: 16px; line-height: 16px;
-  text-align: center; border-radius: 5px; cursor: pointer; flex-shrink: 0; }
-.tree-twist:hover { background: rgba(255,255,255,0.2); opacity: 1; }
 .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tree-badge { background: rgba(255,255,255,0.16); color: var(--nav-text);
-  font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
-.tree-row.sel .tree-badge { background: rgba(255,255,255,0.28); color: #fff; }
-.tree-del { display: inline-flex; align-items: center; opacity: 0; color: var(--nav-mute); padding: 1px; border-radius: 5px; }
-.tree-row:hover .tree-del, .tree-leaf:hover .tree-del { opacity: 0.7; }
-.tree-del:hover { color: #fca5a5; opacity: 1; }
-.tree-row.sel .tree-del, .tree-leaf.sel .tree-del { color: rgba(255,255,255,0.85); }
-.tree-leaf { padding-left: 22px; font-weight: 600; color: var(--nav-mute); }
-.tree-leaf.sel { color: #fff; }
-.tree-empty { color: var(--nav-mute); font-size: 11.5px; font-weight: 600; padding: 5px 8px; }
-/* 자산 목록 페이지네이션(10개 초과 시) */
-.tree-pager { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 8px 2px; }
-.tree-page-btn { border: 0; background: rgba(255,255,255,0.1); color: var(--nav-text); cursor: pointer;
-  width: 22px; height: 22px; border-radius: 6px; font-size: 11px; font-weight: 800; }
-.tree-page-btn:hover:not(:disabled) { background: rgba(255,255,255,0.22); }
-.tree-page-btn:disabled { opacity: 0.3; cursor: default; }
-.tree-page-info { color: var(--nav-mute); font-size: 11.5px; font-weight: 700; }
 /* 본문 번호식 페이지네이션(자산관리/비교 표 하단) */
 .pager { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 16px 0 4px; flex-wrap: wrap; }
 .pg-btn { min-width: 32px; height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px;
@@ -99,6 +79,19 @@ button { font-family: var(--font); }
   place-items: center; background: rgba(255,255,255,0.1); color: #fff; font-size: 20px; }
 .dz-title { font-size: 14px; font-weight: 800; color: var(--nav-text); }
 .dz-sub { font-size: 11.5px; color: var(--nav-mute); margin-top: 4px; }
+/* 사이드바: 진단 종류 선택(최초진단/이행점검) */
+.runkind { display: flex; gap: 6px; margin-bottom: 10px; }
+.runkind-btn { flex: 1; padding: 8px 6px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.04); color: var(--nav-text); font-size: 12.5px; font-weight: 800;
+  cursor: pointer; transition: all .12s ease; }
+.runkind-btn:hover { background: rgba(255,255,255,0.1); }
+.runkind-btn.on { background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #fff; border-color: transparent; }
+
+/* 보고서 헤더: 파일 선택 드롭다운 */
+.rep-pick { display: flex; gap: 8px; align-items: center; margin-right: 10px; }
+.rep-pick select { padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font-size: 13px; font-weight: 700; max-width: 220px; }
+
 .filechip { margin-top: 12px; display: flex; align-items: center; gap: 10px; padding: 11px 12px;
   border-radius: 11px; background: rgba(255,255,255,0.05); border: 1px solid var(--nav-line); }
 .filechip .fi { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; display: grid;
@@ -171,14 +164,8 @@ button { font-family: var(--font); }
 .vcmp-row { display: grid; grid-template-columns: 128px 56px 1fr 20px; align-items: center; gap: 12px; }
 .vcmp-name { font-size: 13px; font-weight: 800; color: var(--slate); }
 .vcmp-cnt { font-size: 20px; font-weight: 900; text-align: right; letter-spacing: -0.02em; line-height: 1; }
-.vcmp-cnt.ai { color: var(--brand); }
-.vcmp-cnt.script { color: #f97316; }
 .vcmp-track { position: relative; height: 14px; border-radius: 8px; background: #eef2f8; overflow: hidden; }
-.vcmp-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 8px; transition: width .45s ease; }
-.vcmp-fill:not(.empty) { min-width: 7px; }
-.vcmp-fill.ai { background: linear-gradient(90deg, #3b82f6, #2563eb); }
-.vcmp-fill.script { background: linear-gradient(90deg, #fb923c, #f97316); }
-.vcmp-fill.empty { background: transparent; }
+.vcmp-fill { position: absolute; left: 0; top: 0; height: 100%; min-width: 7px; border-radius: 8px; transition: width .45s ease; }
 .vcmp-end { font-size: 13px; font-weight: 800; color: var(--mute); text-align: right; }
 .vcmp-foot { font-size: 11.5px; font-weight: 700; color: var(--mute); text-align: right; }
 :root[data-theme="dark"] .vcmp-track { background: #26334d; }
@@ -239,7 +226,11 @@ button { font-family: var(--font); }
 .search { width: 100%; padding: 12px 14px; border-radius: 11px; border: 1px solid var(--line);
   background: var(--card); color: var(--ink); font-size: 14px; font-family: var(--font); margin-bottom: 12px; outline: none; }
 .search:focus { border-color: var(--brand); }
-.lhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 2px 20px 9px 16px; }
+/* 스크롤 영역(.list) 안의 sticky 헤더 — 행과 같은 폭을 써서 칩과 정렬됨.
+   안쪽 여백을 .lrow(테두리1px+padding16px=17px)와 동일하게 맞춰 라벨이 칩 위에 옴 */
+.lhead { position: sticky; top: 0; z-index: 2; background: var(--card);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 17px 9px 17px; }
+:root[data-theme="dark"] .lhead { background: #0f1830; }
 .lh-item { font-size: 11.5px; font-weight: 800; color: var(--mute); letter-spacing: 0.01em; }
 .lh-cols { display: flex; gap: 6px; flex-shrink: 0; }
 .lh-col { width: 48px; text-align: center; font-size: 11.5px; font-weight: 800; color: var(--mute); }
@@ -293,23 +284,21 @@ button { font-family: var(--font); }
 /* ── 보고서 표 ── */
 .tbl-wrap { overflow-x: auto; padding: 4px 22px 8px; }
 table.report { width: 100%; border-collapse: collapse; min-width: 1100px; }
-table.report th { text-align: left; color: var(--slate); font-weight: 800; font-size: 13px;
+table.report th { text-align: center; color: var(--slate); font-weight: 800; font-size: 13px;
   padding: 14px 16px; border-bottom: 2px solid var(--line); white-space: nowrap; }
 table.report td { padding: 15px 16px; border-bottom: 1px solid var(--line); color: var(--ink);
   font-size: 14px; font-weight: 500; white-space: nowrap; vertical-align: top; }
 table.report tr:hover td { background: #f7faff; }
 table.report td.c, table.report th.c { text-align: center; }
+/* 자산관리 표: 모든 칸 가운데 (단, 파일명 그룹 행은 왼쪽) */
+table.report.allc td { text-align: center; }
+table.report.allc td.nm, table.report.allc td.code { text-align: center; }
+table.report.allc .grp-row td { text-align: left; }
 table.report .code { color: var(--brand); font-weight: 900; font-family: ui-monospace, monospace; }
 table.report .nm { font-weight: 800; }
 table.report .reason { min-width: 420px; white-space: normal; word-break: break-word; color: var(--slate); line-height: 1.7; }
 .detail-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; }
 .report-actions { display: flex; gap: 12px; padding: 16px 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
-/* 비교 탭: 진단기록 종류 지정 */
-.kind-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
-.kind-row:first-of-type { border-top: 0; }
-.kind-meta { flex: 1; min-width: 0; color: var(--slate); font-size: 13px; font-weight: 600;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kind-toggle { display: flex; gap: 6px; }
 .report-actions a { text-decoration: none; }
 
 /* ════════════════ 다크 모드 (본문만; 사이드바는 네이비 고정) ════════════════ */

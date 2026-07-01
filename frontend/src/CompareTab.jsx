@@ -1,7 +1,7 @@
 // 비교(별도 탭): 자산·기준(base)·대상(target) 선택 → 전이 상태 비교.
 import React, { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, RUN_KINDS, Pager } from './ui.jsx'
+import { Kpi, Pill, StatusBadge, fmtDateTime, fmtRunOpt, RUN_FIRST, RUN_FOLLOWUP, Pager, CMP_FILTERS } from './ui.jsx'
 
 const PAGE_SIZE = 10   // 한 페이지에 보이는 행 수(초과 시 번호식 페이지로 분할)
 
@@ -29,33 +29,10 @@ export default function CompareTab() {
   const [cmp, setCmp] = useState(null)
   const [filter, setFilter] = useState('전체')
   const [page, setPage] = useState(0)        // 비교 결과표 페이지
-  const [kindPage, setKindPage] = useState(0) // 진단 종류 지정(실행 목록) 페이지
   const [err, setErr] = useState('')
-  const [notice, setNotice] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function changeKind(r, kind) {
-    if (r.kind === kind) return
-    try {
-      await api.setRunKind(r.run_id, kind)
-      setRuns((rs) => rs.map((x) => x.run_id === r.run_id ? { ...x, kind } : x))
-    } catch (e) { setErr(String(e.message || e)) }
-  }
-
-  async function onSaveReport() {
-    if (saving || !base || !target) return
-    setSaving(true); setErr('')
-    try {
-      const res = await api.saveCompareReport(base, target)
-      setNotice(`비교 보고서가 저장되었습니다 → ${res.path}`)
-      setTimeout(() => setNotice(''), 8000)
-      window.open(api.savedReportUrl(res.report_id), '_blank', 'noopener')
-    } catch (e) { setErr(String(e.message || e)) }
-    finally { setSaving(false) }
-  }
 
   const selectAsset = async (aid) => {
-    setAssetId(aid); setCmp(null); setErr(''); setKindPage(0)
+    setAssetId(aid); setCmp(null); setErr('')
     if (!aid) { setRuns([]); setBase(''); setTarget(''); return }
     try {
       const r = await api.getAssetRuns(aid)
@@ -115,7 +92,6 @@ export default function CompareTab() {
             <p className="card-sub">2개의 비교 파일 선택</p></div>
         </div>
         {err && <div className="err">{err}</div>}
-        {notice && <div className="notice">{notice}</div>}
         <div className="cmp-pick" style={{ padding: '4px 22px 18px' }}>
           <div className="cmp-pick-field">
             <label>진단 대상</label>
@@ -141,28 +117,6 @@ export default function CompareTab() {
             disabled={runs.length < 2} onClick={runCompare}>⇄ 비교</button>
         </div>
         {assetId && runs.length < 2 && <div className="hint" style={{ padding: '0 22px 16px' }}>※ 비교하려면 이 진단 대상에 진단 실행이 2개 이상 필요합니다.</div>}
-        {runs.length > 0 && (() => {
-          const kindPageCount = Math.max(1, Math.ceil(runs.length / PAGE_SIZE))
-          const curKindPage = Math.min(kindPage, kindPageCount - 1)
-          const pagedRuns = runs.slice(curKindPage * PAGE_SIZE, curKindPage * PAGE_SIZE + PAGE_SIZE)
-          return (
-          <div className="kind-editor" style={{ padding: '0 22px 18px' }}>
-            <div className="hint" style={{ marginBottom: 8 }}>진단 종류 지정 — 보통 최초진단 ↔ 이행점검으로 비교합니다. (총 {runs.length}건)</div>
-            {pagedRuns.map((r) => (
-              <div className="kind-row" key={r.run_id}>
-                <span className="kind-meta">{fmtDateTime(r.at)} · {r.filename}</span>
-                <div className="kind-toggle">
-                  {RUN_KINDS.map((k) => (
-                    <button key={k} className={`sort-btn${r.kind === k ? ' on' : ''}`}
-                      onClick={() => changeKind(r, k)}>{k}</button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <Pager page={curKindPage} pageCount={kindPageCount} onChange={setKindPage} />
-          </div>
-          )
-        })()}
       </section>
 
       {cmp && (
@@ -179,8 +133,9 @@ export default function CompareTab() {
             <Kpi title="조치율" value={s.fixRate == null ? '—' : `${s.fixRate}%`} sub={`기준 취약 ${s.baseVuln ?? 0}건 기준`} accent />
           </div>
           <div className="sort-bar" style={{ padding: '8px 22px' }}>
-            {['전체', '조치 완료', '미조치', '신규 취약', '양호 유지', 'N/A'].map((f) => (
-              <button key={f} className={`sort-btn${filter === f ? ' on' : ''}`} onClick={() => { setFilter(f); setPage(0) }}>{f}</button>
+            {CMP_FILTERS.map((f) => (
+              <button key={f.value} className={`sort-btn${filter === f.value ? ' on' : ''}`}
+                onClick={() => { setFilter(f.value); setPage(0) }}>{f.label}</button>
             ))}
           </div>
           <div className="tbl-wrap">
@@ -190,7 +145,7 @@ export default function CompareTab() {
               <tbody>
                 {pagedRows.map((r) => (
                   <tr key={r.항목코드}>
-                    <td className="code">{r.항목코드}</td><td>{r.분류}</td><td className="nm">{r.항목}</td>
+                    <td className="code c">{r.항목코드}</td><td className="c">{r.분류}</td><td className="nm">{r.항목}</td>
                     <td className="c"><span className={`sev ${r.중요도}`}>{r.중요도}</span></td>
                     <td className="c"><Pill v={r.최초결과} sm /></td>
                     <td className="c"><Pill v={r.이행결과} sm /></td>
@@ -205,10 +160,6 @@ export default function CompareTab() {
             <a href={api.compareCsvUrl(base, target)}>
               <button className="btn good" style={{ width: 'auto', padding: '13px 22px' }}>⬇ 비교 결과 CSV (.csv)</button>
             </a>
-            <button className="btn primary" style={{ width: 'auto', padding: '13px 22px' }}
-              onClick={onSaveReport} disabled={saving}>
-              {saving ? '저장 중…' : '🗎 비교 보고서 저장 (HTML)'}
-            </button>
           </div>
         </section>
       )}

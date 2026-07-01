@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 # ai_app 패키지 import 보장(프로젝트 루트를 경로에 추가)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from ai_app import backend, config, guide_index, preprocess, report, store  # noqa: E402
+from ai_app import backend, config, preprocess, report, store  # noqa: E402
 
 app = FastAPI(title="CHECKER 대시보드")
 
@@ -42,14 +42,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 엑셀(.xlsx) 다운로드 MIME 타입(여러 보고서 엔드포인트 공용).
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 # run_id(=보고서 파일명 조각)는 영문/숫자/'_'/'-'만 허용 — '/','\','..' 등을 막아
 # REPORTS_DIR 밖으로의 경로 이탈(path traversal) 쓰기를 차단한다.
 _RUN_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
 
 
 def _safe_run_id(run_id: str) -> str:
+    """run_id / report_id 를 파일 경로에 쓰기 전 검증(경로 이탈 차단).
+
+    report_id 의 'cmp-{base}__{target}' 형태도 영문/숫자/'_'/'-'만이라 그대로 통과한다.
+    """
     if not run_id or not _RUN_ID_RE.match(run_id):
-        raise HTTPException(400, f"잘못된 run_id: {run_id!r}")
+        raise HTTPException(400, f"잘못된 ID: {run_id!r}")
     return run_id
 
 
@@ -84,15 +91,8 @@ def _match_label(ai_res: str, script: str) -> str:
 
 
 def _guide_remed(code: str) -> str:
-    """가이드 PDF의 '조치 방법' 절을 로직으로 매핑(폴백용)."""
-    path = config.guide_pdf_for_code(code)
-    if path is None:
-        return ""
-    try:
-        txt = guide_index.remediation_section(str(path), code)
-    except Exception:  # noqa: BLE001  (PDF 파싱 실패는 무시)
-        return ""
-    return f"[가이드 권고]\n{txt}" if txt else ""
+    """가이드 PDF '조치 방법' 절 폴백 매핑 — report._guide_remediation 로 단일화(중복 제거)."""
+    return report._guide_remediation(code)
 
 
 def _prefill_remed(df) -> dict[str, str]:
@@ -108,9 +108,9 @@ def _prefill_remed(df) -> dict[str, str]:
     for _, row in df.iterrows():
         code = row.get("항목코드", "")
         csv_remed = (row.get(col, "") or "").strip() if has_col else ""
-        # 조치방법은 CSV 하드코딩 값만 사용한다.
-        # [비활성화] 가이드 PDF '조치 방법' 절 자동추출 폴백(_guide_remed)은 보존만.
-        #   재활성화하려면 아랫줄을 'csv_remed or _guide_remed(code)' 로 교체.
+        # CSV 조치방법 우선. 없으면 가이드 PDF '조치 방법' 절 자동추출(보고서 표기 대상인 취약 항목만).
+        if not csv_remed and (row.get("결과", "") or "").strip() == config.R_VULN:
+            csv_remed = _guide_remed(code)
         out[code] = csv_remed
     return out
 
@@ -288,25 +288,28 @@ def judge(req: JudgeReq):
         yield json.dumps({"event": "start", "total": total}, ensure_ascii=False) + "\n"
         done = 0
         cancelled = False
-        for it in targets:
-            if state.get("cancel"):   # 사용자가 중지를 누르면 다음 항목부터 토큰 사용 안 함
-                cancelled = True
-                break
-            code = it["항목코드"]
-            try:
-                res = backend.judge_item(it)
-            except Exception as e:  # noqa: BLE001
-                res = {"result": "", "reason": f"(오류: {e})", "remediation": "",
-                       "source": "", "confidence": 0.0}
-            ai[code] = res
-            done += 1
-            yield json.dumps({"event": "item", "code": code,
-                              "result": res.get("result", ""), "reason": res.get("reason", ""),
-                              "remediation": res.get("remediation", ""),
-                              "source": res.get("source", ""), "confidence": res.get("confidence", ""),
-                              "done": done, "total": total}, ensure_ascii=False) + "\n"
-        _flush(state)  # 진행된 AI 판정 결과를 Run CSV에 반영(중지 시 부분 결과도 보존)
-        state["cancel"] = False
+        try:
+            for it in targets:
+                if state.get("cancel"):   # 사용자가 중지를 누르면 다음 항목부터 토큰 사용 안 함
+                    cancelled = True
+                    break
+                code = it["항목코드"]
+                try:
+                    res = backend.judge_item(it)
+                except Exception as e:  # noqa: BLE001
+                    res = {"result": "", "reason": f"(오류: {e})", "remediation": "",
+                           "source": "", "confidence": 0.0}
+                ai[code] = res
+                done += 1
+                yield json.dumps({"event": "item", "code": code,
+                                  "result": res.get("result", ""), "reason": res.get("reason", ""),
+                                  "remediation": res.get("remediation", ""),
+                                  "source": res.get("source", ""), "confidence": res.get("confidence", ""),
+                                  "done": done, "total": total}, ensure_ascii=False) + "\n"
+        finally:
+            # 정상 종료·중지·클라이언트 단절(GeneratorExit) 어느 경우든 진행분을 디스크에 반영.
+            _flush(state)
+            state["cancel"] = False
         yield json.dumps({"event": "cancelled" if cancelled else "done",
                           "done": done, "total": total}, ensure_ascii=False) + "\n"
 
@@ -379,8 +382,8 @@ def report_xlsx(session_id: str):
     label = st["df"]["진단대상"].iloc[0] if len(st["df"]) else "report"
     return StreamingResponse(
         io.BytesIO(data),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=_attachment_headers(f"was_diag_report_{label}.xlsx"),
+        media_type=_XLSX_MEDIA,
+        headers=_attachment_headers(f"AI_initial report_{label}.xlsx"),
     )
 
 
@@ -403,7 +406,7 @@ def report_save(req: SaveReportReq):
         st["run_id"], html, asset_id=st.get("asset_id", ""),
         name=st.get("name", ""), ip=st.get("ip", ""),
         kind=st.get("kind", ""), filename=st.get("filename", ""))
-    return {"ok": True, "report_id": meta["report_id"], "filename": meta["파일명"]}
+    return _saved_report_response(meta)
 
 
 @app.get("/api/reports")
@@ -419,6 +422,7 @@ def get_saved_report(report_id: str, download: int = 0):
     download=0: 인라인 열람(새 탭). download=1: 파일 다운로드(진단대상명·run_id로 명명).
     """
     from fastapi.responses import HTMLResponse
+    report_id = _safe_run_id(report_id)   # 경로 이탈(임의 .html 읽기) 차단
     html = store.load_report_html(report_id)
     if html is None:
         raise HTTPException(404, "저장된 보고서를 찾을 수 없습니다.")
@@ -473,6 +477,7 @@ def get_asset_runs(asset_id: str):
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: str):
     """저장된 Run 1건을 대시보드 항목 페이로드로 로드(읽기전용)."""
+    run_id = _safe_run_id(run_id)
     run_df = store.load_run_df(run_id)
     if run_df is None:
         raise HTTPException(404, "Run을 찾을 수 없습니다.")
@@ -486,6 +491,7 @@ def save_run_report(run_id: str):
 
     자산관리 → 진단기록 상세 화면 하단의 '보고서 저장(HTML)' 버튼이 호출한다.
     """
+    run_id = _safe_run_id(run_id)   # 경로 이탈(임의 .html 쓰기) 차단
     run_df = store.load_run_df(run_id)
     if run_df is None:
         raise HTTPException(404, "Run을 찾을 수 없습니다.")
@@ -509,7 +515,7 @@ def update_run_kind(run_id: str, req: RunKindReq):
     """진단기록의 종류(최초진단/이행점검) 변경 — 비교 탭에서 지정."""
     if req.kind not in config.VALID_RUN_KINDS:
         raise HTTPException(400, "잘못된 진단 종류")
-    if not store.set_run_kind(run_id, req.kind):
+    if not store.set_run_kind(_safe_run_id(run_id), req.kind):
         raise HTTPException(404, "Run을 찾을 수 없습니다.")
     return {"ok": True, "kind": req.kind}
 
@@ -517,7 +523,7 @@ def update_run_kind(run_id: str, req: RunKindReq):
 @app.delete("/api/runs/{run_id}")
 def delete_run(run_id: str):
     """진단 기록(Run) 1건 삭제(자산의 마지막 Run이면 자산도 제거)."""
-    if not store.delete_run(run_id):
+    if not store.delete_run(_safe_run_id(run_id)):
         raise HTTPException(404, "Run을 찾을 수 없습니다.")
     return {"ok": True}
 
@@ -530,7 +536,7 @@ def delete_asset(asset_id: str):
 
 
 @app.get("/api/compare")
-def compare(base: str, target: str, asset_id: str = ""):
+def compare(base: str, target: str):
     """두 Run(base·target)을 항목코드로 비교. base/target은 사용자가 고른 run_id."""
     base, target = _safe_run_id(base), _safe_run_id(target)
     try:
@@ -559,7 +565,7 @@ def save_compare_report(base: str, target: str):
 
 
 @app.get("/api/compare.csv")
-def compare_csv(base: str, target: str, asset_id: str = ""):
+def compare_csv(base: str, target: str):
     """비교 결과 CSV 다운로드(UTF-8 BOM — Excel 한글 호환)."""
     base, target = _safe_run_id(base), _safe_run_id(target)
     try:
@@ -572,6 +578,42 @@ def compare_csv(base: str, target: str, asset_id: str = ""):
         media_type="text/csv; charset=utf-8",
         headers=_attachment_headers(f"compare_{base}_vs_{target}.csv"),
     )
+
+
+
+@app.get("/api/runs/{run_id}/report.xlsx")
+def run_report_xlsx(run_id: str):
+    """저장된 Run 1건(최초진단 등)의 5시트 엑셀 보고서 — 최초 보고서 다운로드용."""
+    run_df = store.load_run_df(_safe_run_id(run_id))
+    if run_df is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    data = report.build_xlsx_from_run(run_df)   # 진단대상 시트 메타(호스트명/버전) 포함
+    name, _ip = _first_target(run_df)
+    return StreamingResponse(io.BytesIO(data), media_type=_XLSX_MEDIA,
+                             headers=_attachment_headers(f"report_{name or run_id}.xlsx"))
+
+
+@app.get("/api/final-report")
+def final_report(base: str, target: str):
+    """최초진단(base) ↔ 이행점검(target) 병합 최종 보고서 표 데이터(JSON)."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
+    bdf, tdf = store.load_run_df(base), store.load_run_df(target)
+    if bdf is None or tdf is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    return {"rows": report.build_final_report_rows(bdf, tdf)}
+
+
+@app.get("/api/final-report.xlsx")
+def final_report_xlsx(base: str, target: str):
+    """최종 보고서 5시트 엑셀 — 3-1 시트만 최초/최종 결과·근거 8컬럼."""
+    base, target = _safe_run_id(base), _safe_run_id(target)
+    bdf, tdf = store.load_run_df(base), store.load_run_df(target)
+    if bdf is None or tdf is None:
+        raise HTTPException(404, "Run을 찾을 수 없습니다.")
+    data = report.build_final_xlsx(bdf, tdf)
+    name, _ip = _first_target(bdf)
+    return StreamingResponse(io.BytesIO(data), media_type=_XLSX_MEDIA,
+                             headers=_attachment_headers(f"AI_final_report_{name or base}.xlsx"))
 
 
 # ── (프로덕션) 빌드된 프론트 정적 서빙: frontend/dist 가 있을 때만 ──

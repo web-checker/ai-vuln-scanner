@@ -8,6 +8,26 @@ export const RUN_FIRST = '최초진단'
 export const RUN_FOLLOWUP = '이행점검'
 export const RUN_KINDS = [RUN_FIRST, RUN_FOLLOWUP]
 
+// 보고서 하위탭 키 — 최초 보고서 / 최종 보고서(사이드바·App·ReportTab 공유)
+export const REPORT_FIRST = 'first'
+export const REPORT_FINAL = 'final'
+
+// 비교 상태값(백엔드 config.C_* 와 동일) + 비교 탭 필터(표시 라벨 ↔ 실제 상태값).
+// ※ 필터는 r.상태 와 '값'으로 매칭하므로 라벨('조치 완료')이 아니라 값('개선')을 써야 한다.
+export const CMP_IMPROVED = '개선'
+export const CMP_UNFIXED = '미조치'
+export const CMP_WORSENED = '악화'
+export const CMP_KEPT = '양호유지'
+export const CMP_NA = 'N/A'
+export const CMP_FILTERS = [
+  { label: '전체', value: '전체' },
+  { label: '조치 완료', value: CMP_IMPROVED },
+  { label: '미조치', value: CMP_UNFIXED },
+  { label: '신규 취약', value: CMP_WORSENED },
+  { label: '양호 유지', value: CMP_KEPT },
+  { label: 'N/A', value: CMP_NA },
+]
+
 // 최종 결과 선택: 확정값 우선 → 스크립트 → AI → N/A (보고서/상세 공통)
 export const prefResult = (it) =>
   it.finalResult || (VALID.includes(it.script) ? it.script : '') ||
