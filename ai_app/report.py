@@ -766,19 +766,31 @@ def _sheet_graph(ws, S, ctx):
         vc = ws.cell(row=r, column=3, value=f"={ref(f'H{r1}')}")
         vc.number_format = "0.0%"; vc.alignment = S["center"]
     _box(ws, S, h0 + 1, 2, h0 + n, 3, align=S["center"])
-    radar = RadarChart(); radar.type = "standard"
-    radar.height = radar.width = SIDE
-    radar.add_data(Reference(ws, min_col=3, min_row=h0, max_row=h0 + n), titles_from_data=True)
-    radar.set_categories(Reference(ws, min_col=2, min_row=h0 + 1, max_row=h0 + n))
-    radar.series[0].graphicalProperties = GraphicalProperties()
-    radar.series[0].graphicalProperties.line = LineProperties(solidFill="4472C4", w=28575)
-    radar.x_axis.delete = False
-    radar.y_axis.delete = False
-    radar.y_axis.scaling.min = 0; radar.y_axis.scaling.max = 1
-    radar.y_axis.majorUnit = 0.2; radar.y_axis.numFmt = "0%"
-    axis_gray(radar.y_axis)
-    radar.legend = None
-    place(radar, b0 + 2)
+    # 도메인 3개 이상이면 방사형(면). 1~2개면 방사형이 면을 못 그려 축/선만 남으므로,
+    # '채움 없는 얇은 파란 윤곽 막대'로 대체 — 부피감을 줄여 방사형 느낌에 가깝게, 팬텀 축 없이.
+    if n >= 3:
+        chart = RadarChart(); chart.type = "standard"
+        chart.height = chart.width = SIDE
+        chart.add_data(Reference(ws, min_col=3, min_row=h0, max_row=h0 + n), titles_from_data=True)
+        chart.set_categories(Reference(ws, min_col=2, min_row=h0 + 1, max_row=h0 + n))
+        chart.series[0].graphicalProperties = GraphicalProperties()
+        chart.series[0].graphicalProperties.line = LineProperties(solidFill="4472C4", w=28575)
+    else:
+        chart = BarChart(); chart.type = "col"; chart.grouping = "clustered"
+        chart.gapWidth = 400                       # 막대 얇게(부피감↓)
+        chart.height = chart.width = SIDE
+        chart.add_data(Reference(ws, min_col=3, min_row=h0, max_row=h0 + n), titles_from_data=True)
+        chart.set_categories(Reference(ws, min_col=2, min_row=h0 + 1, max_row=h0 + n))
+        gp = GraphicalProperties(); gp.noFill = True             # 채움 없는 속 빈 막대
+        gp.line = LineProperties(solidFill="4472C4", w=19050)    # 방사형과 같은 파랑 얇은 윤곽
+        chart.series[0].graphicalProperties = gp
+    chart.x_axis.delete = False
+    chart.y_axis.delete = False
+    chart.y_axis.scaling.min = 0; chart.y_axis.scaling.max = 1
+    chart.y_axis.majorUnit = 0.2; chart.y_axis.numFmt = "0%"
+    axis_gray(chart.y_axis)
+    chart.legend = None
+    place(chart, b0 + 2)
 
     # ── 블록2: 양호/취약/N/A (원형) ──
     band(b1, "양호 / 취약 / N/A 비율")
