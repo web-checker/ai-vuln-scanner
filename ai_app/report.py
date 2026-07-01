@@ -552,13 +552,23 @@ def _build_workbook(rdf: pd.DataFrame):
 
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True   # 열 때 수식 자동 재계산
-    _sheet_cover(wb.active, S)
+    # compare_map 有 = 이행점검(base↔target 병합) → 문서번호 구분코드를 CA로. 無 = 최초진단 → VA.
+    _sheet_cover(wb.active, S, is_followup=compare_map is not None)
     _sheet_targets(wb.create_sheet("1. 진단 대상"), S, ctx)
     _sheet_graph(wb.create_sheet("2-1. 요약결과(그래프)"), S, ctx)
     _sheet_summary(wb.create_sheet(SUMMARY_SHEET), S, ctx)
     _sheet_detail(wb.create_sheet("3-1. 진단 결과"), S, ctx)
     return wb
-def _sheet_cover(ws, S):
+def _doc_number(is_followup: bool) -> str:
+    """문서번호 산출. 형식은 팀명-구분코드-연도-일련번호이며, 구분코드(2번째 세그먼트)만
+    최초진단=VA / 이행점검=CA 로 교체한다(팀명·연도·번호는 그대로)."""
+    parts = REPORT_META["문서번호"].split("-")
+    if len(parts) >= 2:
+        parts[1] = "CA" if is_followup else "VA"
+    return "-".join(parts)
+
+
+def _sheet_cover(ws, S, is_followup: bool = False):
     ws.title = "0. 표지"
     ws.sheet_view.showGridLines = False
     _widths(ws, {"A": 2})
@@ -567,7 +577,7 @@ def _sheet_cover(ws, S):
     for r in (3, 4, 5, 6):
         ws.row_dimensions[r].height = 22
     # 우상단 메타 박스
-    meta = [("문서번호", REPORT_META["문서번호"]), ("작성자", REPORT_META["작성자"]),
+    meta = [("문서번호", _doc_number(is_followup)), ("작성자", REPORT_META["작성자"]),
             ("보안등급", REPORT_META["보안등급"]), ("Ver", REPORT_META["Ver"])]
     for i, (k, v) in enumerate(meta, start=3):
         kc = ws.cell(row=i, column=11, value=k)
